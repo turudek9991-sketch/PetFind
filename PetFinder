@@ -1,34 +1,37 @@
 -- ============================================================
--- GROW A GARDEN: AUTO BUY ONLY + SIMPLE MINIMALIST UI
--- Hanya fitur Auto Buy instan dengan UI Kotak Sederhana
+-- GROW A GARDEN: AUTO BUY ONLY + SIMPLE UI (PERSISTENT CONFIG)
+-- Awalan default FALSE (kosong) & otomatis simpan/muat JSON Config
 -- Tanpa Server Hop, Tanpa Firebase/API Database, Sangat Ringan!
 -- ============================================================
 
 local Players         = game:GetService("Players")
+local HttpService     = game:GetService("HttpService")
 local TweenService    = game:GetService("TweenService")
 local UIS             = game:GetService("UserInputService")
 local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
--- KONFIGURASI AWAL PET TARGET
+-- KONFIGURASI FILE & DEFAULT SETTING (SEMUA FALSE)
 -- ============================================================
+local ConfigFile = "SimpleAutoBuyConfig.json"
+
 local Config = {
-    AutoBuy = true, -- Default langsung aktif saat dieksekusi
+    AutoBuy = false, -- Default awal mati total saat dieksekusi
     Targets = {
-        Frog            = true,
-        Bunny           = true,
-        Owl             = true,
-        Deer            = true,
-        Robin           = true,
-        Bee             = true,
-        Dragonfly       = true,
-        Monkey          = true,
-        GoldenDragonfly = true,
-        Unicorn         = true,
-        Raccoon         = true,
-        BlackDragon     = true,
-        IceSerpent      = true,
+        Frog            = false,
+        Bunny           = false,
+        Owl             = false,
+        Deer            = false,
+        Robin           = false,
+        Bee             = false,
+        Dragonfly       = false,
+        Monkey          = false,
+        GoldenDragonfly = false,
+        Unicorn         = false,
+        Raccoon         = false,
+        BlackDragon     = false,
+        IceSerpent      = false,
     }
 }
 
@@ -38,15 +41,51 @@ local ListSemuaPet = {
     "Raccoon","BlackDragon","IceSerpent",
 }
 
+-- ============================================================
+-- ENGINE SAVE / LOAD CONFIG JSON
+-- ============================================================
+local function LoadConfig()
+    if isfile and readfile and isfile(ConfigFile) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
+        if ok and type(data) == "table" then
+            if data.AutoBuy ~= nil then Config.AutoBuy = data.AutoBuy end
+            if data.Targets and type(data.Targets) == "table" then
+                for nama, status in pairs(data.Targets) do
+                    if Config.Targets[nama] ~= nil then
+                        Config.Targets[nama] = status
+                    end
+                end
+            end
+            print("[Auto Buy] Berhasil memuat konfigurasi dari file!")
+        end
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        local ok, err = pcall(function() 
+            writefile(ConfigFile, HttpService:JSONEncode(Config)) 
+        end)
+        if ok then
+            print("[Auto Buy] Konfigurasi berhasil disimpan!")
+        else
+            warn("[Auto Buy] Gagal menyimpan konfigurasi: ", err)
+        end
+    end
+end
+
+-- Muat data config tersimpan sebelum UI dirender
+LoadConfig()
+
 -- Palet Warna Monokrom Elegan
 local C = {
-    BG       = Color3.fromRGB(12, 12, 14),     -- Background Utama
-    BG2      = Color3.fromRGB(18, 18, 22),     -- Kartu / Baris Pet
-    BG3      = Color3.fromRGB(26, 26, 32),     -- Hover / Tombol Aktif
-    BORDER   = Color3.fromRGB(40, 40, 50),     -- Garis Batas Halus
-    TEXT_PRI = Color3.fromRGB(240, 240, 245),  -- Teks Utama
-    TEXT_SEC = Color3.fromRGB(120, 120, 135),  -- Teks Sekunder
-    ACCENT   = Color3.fromRGB(255, 255, 255),  -- Putih Murni
+    BG       = Color3.fromRGB(12, 12, 14),     
+    BG2      = Color3.fromRGB(18, 18, 22),     
+    BG3      = Color3.fromRGB(26, 26, 32),     
+    BORDER   = Color3.fromRGB(40, 40, 50),     
+    TEXT_PRI = Color3.fromRGB(240, 240, 245),  
+    TEXT_SEC = Color3.fromRGB(120, 120, 135),  
+    ACCENT   = Color3.fromRGB(255, 255, 255),  
 }
 
 -- ============================================================
@@ -59,7 +98,7 @@ local oldUI = GuiParent:FindFirstChild("SimpleAutoBuyUI")
 if oldUI then oldUI:Destroy() end
 
 -- ============================================================
--- DRAG LOGIC (Biar Menu Bisa Digeser)
+-- DRAG LOGIC
 -- ============================================================
 local function MakeDraggable(frame, handle)
     local dragging, dragStart, startPos
@@ -88,7 +127,6 @@ local SG = Instance.new("ScreenGui", GuiParent)
 SG.Name = "SimpleAutoBuyUI"
 SG.ResetOnSpawn = false
 
--- Ukuran kotak menu dibuat lebih ringkas (lebar 230, tinggi 350)
 local MainFrame = Instance.new("Frame", SG)
 MainFrame.Size = UDim2.new(0, 230, 0, 350)
 MainFrame.Position = UDim2.new(0, 50, 0, 120)
@@ -97,7 +135,7 @@ MainFrame.BorderSizePixel = 0
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 Instance.new("UIStroke", MainFrame).Color = C.BORDER
 
--- Title Bar (Tempat Menyeret Menu)
+-- Title Bar
 local TitleBar = Instance.new("Frame", MainFrame)
 TitleBar.Size = UDim2.new(1, 0, 0, 35)
 TitleBar.BackgroundColor3 = C.BG2
@@ -114,7 +152,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 TitleLbl.Position = UDim2.new(0, 12, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "Auto Buy · Minimalis"
+TitleLbl.Text = "Auto Buy · Config Saved"
 TitleLbl.TextColor3 = C.TEXT_PRI
 TitleLbl.Font = Enum.Font.GothamBold
 TitleLbl.TextSize = 12
@@ -157,6 +195,8 @@ MasterPad.PaddingRight = UDim.new(0, 12)
 
 MasterBtn.MouseButton1Click:Connect(function()
     Config.AutoBuy = not Config.AutoBuy
+    SaveConfig() -- Simpan perubahan status utama ke file JSON
+    
     MasterRow.BackgroundColor3 = Config.AutoBuy and C.BG3 or C.BG2
     MasterStroke.Color = Config.AutoBuy and C.ACCENT or C.BORDER
     MasterTxt.TextColor3 = Config.AutoBuy and C.TEXT_PRI or C.TEXT_SEC
@@ -192,7 +232,7 @@ for idx, namaPet in ipairs(ListSemuaPet) do
 
     local Row = Instance.new("TextButton", Scroll)
     Row.LayoutOrder = idx
-    Row.Size = UDim2.new(1, -6, 0, 26) -- Ukuran row pas di dalam scroll
+    Row.Size = UDim2.new(1, -6, 0, 26) 
     Row.BackgroundColor3 = isTarget and C.BG3 or C.BG2
     Row.BorderSizePixel = 0
     Row.Text = ""
@@ -224,6 +264,8 @@ for idx, namaPet in ipairs(ListSemuaPet) do
 
     Row.MouseButton1Click:Connect(function()
         Config.Targets[namaPet] = not (Config.Targets[namaPet] or false)
+        SaveConfig() -- Simpan perubahan target pet ke file JSON
+        
         local aktif = Config.Targets[namaPet]
         Row.BackgroundColor3 = aktif and C.BG3 or C.BG2
         RowStroke.Color      = aktif and C.ACCENT or C.BORDER
@@ -262,11 +304,9 @@ local function CekDanBeliPet(item)
     local root      = character and character:FindFirstChild("HumanoidRootPart")
 
     if root and targetPart then
-        -- Instan Teleport koordinat CFrame ke lokasi pet target
         root.CFrame = targetPart.CFrame
         task.wait(0.01)
 
-        -- Ambil ProximityPrompt bawaan game untuk memproses interaksi beli
         local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
         if prompt then
             prompt.HoldDuration = 0
@@ -282,7 +322,7 @@ local function CekDanBeliPet(item)
 end
 
 -- ============================================================
--- INTERUPSI WORKSPACE (TURBO DESCENT DETECTOR)
+-- INTERUPSI WORKSPACE
 -- ============================================================
 task.spawn(function()
     local ok, Map = pcall(function() return workspace:WaitForChild("Map", 15) end)
@@ -299,19 +339,19 @@ task.spawn(function()
         end
     end
 
-    -- [1] Ambil Pet Lama (Membongkar folder bawaan terdalam seperti folder Middle)
+    -- [1] Ambil Pet Lama (Membongkar folder Middle)
     task.defer(function()
         for _, obj in ipairs(PetFolder:GetDescendants()) do
             ProsesObjek(obj)
         end
     end)
 
-    -- [2] Ambil Pet Baru yang Baru Saja Terspawn (Instan Tanpa Delay)
+    -- [2] Ambil Pet Baru yang Baru Saja Terspawn
     PetFolder.DescendantAdded:Connect(function(newDescendant)
         ProsesObjek(newDescendant)
     end)
     
-    -- [3] Backup Loop Berkala (Check-up total setiap 1 detik agar aman ditinggal tidur)
+    -- [3] Backup Loop Berkala (Check-up setiap 1 detik)
     task.spawn(function()
         while MainFrame.Parent do
             task.wait(1)
@@ -324,4 +364,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder] Versi Simple UI Sukses Terload ✔")
+print("[Pet Finder] Versi Simple UI + Save Config Sukses Terload ✔")
