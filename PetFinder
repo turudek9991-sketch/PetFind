@@ -1,6 +1,6 @@
 -- ============================================================
 -- GROW A GARDEN: AUTO BUY ONLY + SIMPLE UI (PERSISTENT CONFIG)
--- FITUR TAMBAHAN: EXTREME OPTIMIZER V3 (TOTAL LOADING BYPASS)
+-- FITUR TAMBAHAN: EXTREME OPTIMIZER V4 (ANTI CAMERA FREEZE STUCK)
 -- Awalan default FALSE (kosong) & otomatis simpan/muat JSON Config
 -- ============================================================
 
@@ -12,19 +12,16 @@ local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
--- [TERBARU!] REKAYASA TURBO CLIENT - BYPASS TOTAL LOADING CONTROLLER
+-- [TERBARU V4] ENGINE BYPASS & ANTI-STUCK KAMERA LANGIT
 -- ============================================================
 task.spawn(function()
-    -- 1. HANCURKAN CLONE LOADING YANG DIKIRIM CONTROLLER GAME KE WORKSPACE
+    -- 1. HANCURKAN CLONE LOADING DI WORKSPACE
     local function MusnahkanLoadingWorkspace()
-        -- Cari clone Menu dari ReplicatedFirst yang hinggap di Workspace
         local CoreLoading = workspace:FindFirstChild("LoadingScreenMenu")
         if CoreLoading then
             CoreLoading:Destroy()
-            print("[Anti-Stuck] Objek LoadingScreenMenu di Workspace berhasil dimusnahkan!")
+            print("[Anti-Stuck] LoadingScreenMenu dihancurkan!")
         end
-
-        -- Cari barangkali ada sisa gui yang lolos
         for _, obj in ipairs(workspace:GetChildren()) do
             if string.find(obj.Name:lower(), "loading") then
                 obj:Destroy()
@@ -32,36 +29,51 @@ task.spawn(function()
         end
     end
 
-    -- Eksekusi instan saat masuk game
     MusnahkanLoadingWorkspace()
-
-    -- Detektor konstan: Jika controller game mencoba mengkloning loading lagi saat hop, langsung potong jalurnya!
     workspace.ChildAdded:Connect(function(child)
         if string.find(child.Name:lower(), "loading") then
-            task.wait() -- Jeda 1 milidetik untuk memastikan objek terdaftar
+            task.wait()
             child:Destroy()
-            print("[Anti-Stuck] Kloning Loading Screen baru di Workspace berhasil digagalkan!")
         end
     end)
 
-    -- 2. RESET INSTAN EYE EFFECT (Menghapus Blur & Paksa Kamera Kembali Normal)
+    -- 2. ENGINE FIX CAMERA: MEMUTUS FORCE TWEEN CONTROLLER GAME
+    task.spawn(function()
+        local Cam = workspace.CurrentCamera
+        -- Lakukan perulangan agresif selama 5 detik pertama masuk server untuk melawan RenderStepped game
+        for i = 1, 100 do
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if root and hum then
+                -- Lepas paksa dari mode Scriptable bawaan loading game
+                Cam.CameraType = Enum.CameraType.Custom
+                Cam.CameraSubject = hum
+                Cam.FieldOfView = 70
+                
+                -- Lepas jangkar karakter jika ditahan oleh controller game
+                root.Anchored = false 
+            end
+            task.wait(0.05) -- Loop cepat 20x per detik
+        end
+        print("[Anti-Stuck] Kamera berhasil dikunci kembali ke karakter!")
+    end)
+
+    -- 3. HAPUS BLUR LIGHTING
     pcall(function()
         local Lighting = game:GetService("Lighting")
         local Blur = Lighting:FindFirstChild("Blur") or workspace.CurrentCamera:FindFirstChild("Blur")
         if Blur then Blur:Destroy() end
-        
-        -- Kembalikan tipe kamera ke mode bebas/karakter agar tidak stuck freeze di langit
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        workspace.CurrentCamera.FieldOfView = 70
     end)
 
-    -- 3. HAPUS FOLDER GARDENS DI CLIENT BIAR LOADING MAP SUPER INSTAN
+    -- 4. HAPUS FOLDER GARDENS BIAR FPS JOS
     local ok, Map = pcall(function() return workspace:WaitForChild("Map", 15) end)
     if ok and Map then
         local GardensFolder = Map:WaitForChild("Gardens", 10)
         if GardensFolder then
             GardensFolder:Destroy()
-            print("[Optimizer] Folder Gardens berhasil dibersihkan dari Client!")
+            print("[Optimizer] Folder Gardens dibersihkan!")
         end
     end
 end)
@@ -207,7 +219,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 TitleLbl.Position = UDim2.new(0, 12, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "Auto Buy · Super Bypass"
+TitleLbl.Text = "Auto Buy · Turbo Safe"
 TitleLbl.TextColor3 = C.TEXT_PRI
 TitleLbl.Font = Enum.Font.GothamBold
 TitleLbl.TextSize = 12
@@ -253,7 +265,7 @@ MasterBtn.MouseButton1Click:Connect(function()
     SaveConfig() 
     
     MasterRow.BackgroundColor3 = Config.AutoBuy and C.BG3 or C.BG2
-    MasterStroke.Color = Config.AutoBuy and C.ACCENT or C.BORDER
+    MasterStroke.Color = Config.AutoBuy protect and C.ACCENT or C.BORDER
     MasterTxt.TextColor3 = Config.AutoBuy and C.TEXT_PRI or C.TEXT_SEC
     MasterBtn.Text = Config.AutoBuy and "ON" or "OFF"
     MasterBtn.TextColor3 = Config.AutoBuy and C.ACCENT or C.TEXT_SEC
@@ -419,4 +431,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder] Versi Ultimate Bypass Sukses Terload ✔")
+print("[Pet Finder] Versi Extreme V4 Sukses Terload ✔")
