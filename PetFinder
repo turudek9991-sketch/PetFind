@@ -1,6 +1,6 @@
 -- ============================================================
 -- GROW A GARDEN: AUTO BUY ONLY + SIMPLE UI (PERSISTENT CONFIG)
--- FITUR TAMBAHAN: EXTREME OPTIMIZER V2 (SKIP LOADING + NO GARDENS)
+-- FITUR TAMBAHAN: EXTREME OPTIMIZER V3 (TOTAL LOADING BYPASS)
 -- Awalan default FALSE (kosong) & otomatis simpan/muat JSON Config
 -- ============================================================
 
@@ -12,35 +12,56 @@ local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
--- [BARU!] TURBO LOADER ENGINE - SKIP LOADING & HAPUS GARDENS
+-- [TERBARU!] REKAYASA TURBO CLIENT - BYPASS TOTAL LOADING CONTROLLER
 -- ============================================================
 task.spawn(function()
-    -- 1. SKIP & HAPUS GUI LOADING SCREEN GAME COCOK DENGAN SCREENSHOT
-    local function HapusLoadingGame()
-        local LoadingGui = PlayerGui:FindFirstChild("LoadingGui") or PlayerGui:FindFirstChild("LoadingScreen")
-        if LoadingGui then
-            LoadingGui:Destroy()
-            print("[Optimizer] Loading Screen game berhasil di-skip paksa!")
+    -- 1. HANCURKAN CLONE LOADING YANG DIKIRIM CONTROLLER GAME KE WORKSPACE
+    local function MusnahkanLoadingWorkspace()
+        -- Cari clone Menu dari ReplicatedFirst yang hinggap di Workspace
+        local CoreLoading = workspace:FindFirstChild("LoadingScreenMenu")
+        if CoreLoading then
+            CoreLoading:Destroy()
+            print("[Anti-Stuck] Objek LoadingScreenMenu di Workspace berhasil dimusnahkan!")
+        end
+
+        -- Cari barangkali ada sisa gui yang lolos
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if string.find(obj.Name:lower(), "loading") then
+                obj:Destroy()
+            end
         end
     end
-    
-    -- Eksekusi instan dan pasang detektor jika muncul kembali saat hop
-    HapusLoadingGame()
-    PlayerGui.ChildAdded:Connect(function(child)
+
+    -- Eksekusi instan saat masuk game
+    MusnahkanLoadingWorkspace()
+
+    -- Detektor konstan: Jika controller game mencoba mengkloning loading lagi saat hop, langsung potong jalurnya!
+    workspace.ChildAdded:Connect(function(child)
         if string.find(child.Name:lower(), "loading") then
-            task.wait()
+            task.wait() -- Jeda 1 milidetik untuk memastikan objek terdaftar
             child:Destroy()
-            print("[Optimizer] Loading Screen baru terdeteksi dan langsung di-skip!")
+            print("[Anti-Stuck] Kloning Loading Screen baru di Workspace berhasil digagalkan!")
         end
     end)
 
-    -- 2. HAPUS FOLDER GARDENS DI CLIENT BIAR FPS TELEPORTASI TURBO
+    -- 2. RESET INSTAN EYE EFFECT (Menghapus Blur & Paksa Kamera Kembali Normal)
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        local Blur = Lighting:FindFirstChild("Blur") or workspace.CurrentCamera:FindFirstChild("Blur")
+        if Blur then Blur:Destroy() end
+        
+        -- Kembalikan tipe kamera ke mode bebas/karakter agar tidak stuck freeze di langit
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        workspace.CurrentCamera.FieldOfView = 70
+    end)
+
+    -- 3. HAPUS FOLDER GARDENS DI CLIENT BIAR LOADING MAP SUPER INSTAN
     local ok, Map = pcall(function() return workspace:WaitForChild("Map", 15) end)
     if ok and Map then
         local GardensFolder = Map:WaitForChild("Gardens", 10)
         if GardensFolder then
             GardensFolder:Destroy()
-            print("[Optimizer] Folder Gardens berhasil dimusnahkan dari Client!")
+            print("[Optimizer] Folder Gardens berhasil dibersihkan dari Client!")
         end
     end
 end)
@@ -186,7 +207,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 TitleLbl.Position = UDim2.new(0, 12, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "Auto Buy · Turbo Skip"
+TitleLbl.Text = "Auto Buy · Super Bypass"
 TitleLbl.TextColor3 = C.TEXT_PRI
 TitleLbl.Font = Enum.Font.GothamBold
 TitleLbl.TextSize = 12
@@ -398,4 +419,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder] Versi Turbo Optimizer V2 Sukses Terload ✔")
+print("[Pet Finder] Versi Ultimate Bypass Sukses Terload ✔")
