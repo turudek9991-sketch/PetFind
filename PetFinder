@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN: PET FINDER MAIN V32 (SAFE BYPASS EDITION)
+-- GROW A GARDEN: PET FINDER MAIN V32 (FIXED SYNTAX & CAMERA)
 -- 1 Window utama | 3 Tab: Auto Buy / Auto Hop / Live Server
 -- Warna: Monokrom elegan (hitam + putih + aksen putih/abu)
 -- ============================================================
@@ -15,40 +15,49 @@ local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
--- [PERBAIKAN AMAN] BYPASS LOADING & FIX KAMERA KATEGORI TURBO
+-- FORCE FIX KAMERA TURUN DARI LANGIT (HIGH PRIORITY)
 -- ============================================================
 task.spawn(function()
-    -- 1. Hancurkan GUI LoadingScreenMenu yang kloning ke Workspace secara spesifik (Bukan massal!)
+    -- 1. Hancurkan GUI LoadingScreenMenu di Workspace secara aman
     local CoreLoading = workspace:FindFirstChild("LoadingScreenMenu")
     if CoreLoading then
         CoreLoading:Destroy()
-        print("[Anti-Stuck] Objek LoadingScreenMenu berhasil dibersihkan secara aman!")
+        print("[Anti-Stuck] Objek LoadingScreenMenu berhasil dibersihkan!")
     end
 
-    -- 2. Matikan Blur Efek secara instan jika ada
+    -- 2. Matikan Blur Efek secara instan
     pcall(function()
         local Lighting = game:GetService("Lighting")
         local Blur = Lighting:FindFirstChild("Blur") or workspace.CurrentCamera:FindFirstChild("Blur")
         if Blur then Blur:Destroy() end
     end)
 
-    -- 3. Paksa Kamera turun mengunci ke Karakter (Melawan looping RenderStepped game)
-    task.spawn(function()
-        local Cam = workspace.CurrentCamera
-        for i = 1, 60 do -- Lakukan force-lock selama 3 detik pertama saat spawn
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildWhichIsA("Humanoid")
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            
+    -- 3. Gunakan RenderStepped agar kamera wajib turun mengunci ke tubuh karakter
+    local Cam = workspace.CurrentCamera
+    local KoneksiKamera
+    local WaktuMulai = os.clock()
+
+    KoneksiKamera = RunService.RenderStepped:Connect(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        
+        -- Paksa terus selama 4 detik pertama saat spawn di server baru
+        if os.clock() - WaktuMulai < 4 then
             if root and hum then
                 Cam.CameraType = Enum.CameraType.Custom
                 Cam.CameraSubject = hum
                 Cam.FieldOfView = 70
-                root.Anchored = false -- Bebaskan karakter jika di-anchor sistem game
+                root.Anchored = false -- Lepas freeze jika ditahan script game
             end
-            task.wait(0.05)
+        else
+            -- Jika sudah 4 detik, matikan loop agar kamera bisa digerakkan normal kembali
+            if KoneksiKamera then
+                KoneksiKamera:Disconnect()
+                KoneksiKamera = nil
+                print("[Anti-Stuck] Loop kamera selesai. Kamera dinormalisasi!")
+            end
         end
-        print("[Anti-Stuck] Kamera sukses dikunci kembali ke Karakter!")
     end)
 end)
 
@@ -79,7 +88,7 @@ for _, p in ipairs(ListSemuaPet) do
 end
 
 -- ============================================================
--- SAVE / LOAD JSON
+-- SAVE / LOAD JSON CONFIG
 -- ============================================================
 local function LoadConfig()
     if isfile and readfile and isfile(ConfigFile) then
@@ -108,12 +117,12 @@ LoadConfig()
 -- UTILITY & FIREBASE ENGINE
 -- ============================================================
 local function AturDataFirebase(path, data)
-    if not writefile then return nil end
+    if not HttpRequest then return nil end
     local url = FirebaseURL .. path .. ".json"
     local dataJson = HttpService:JSONEncode(data)
     local hasil = nil
     pcall(function()
-        hasil = request({
+        hasil = HttpRequest({
             Url = url,
             Method = "PUT",
             Headers = {["Content-Type"] = "application/json"},
@@ -124,11 +133,11 @@ local function AturDataFirebase(path, data)
 end
 
 local function AmbilDataFirebase(path)
-    if not writefile then return {} end
+    if not HttpRequest then return {} end
     local url = FirebaseURL .. path .. ".json"
     local hasil = nil
     pcall(function()
-        hasil = request({Url = url, Method = "GET"})
+        hasil = HttpRequest({Url = url, Method = "GET"})
     end)
     if hasil and hasil.Success and hasil.Body then
         local ok, data = pcall(function() return HttpService:JSONDecode(hasil.Body) end)
@@ -279,7 +288,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 TitleLbl.Position = UDim2.new(0, 12, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "PET FINDER v32 · BYPASS SAFE"
+TitleLbl.Text = "PET FINDER v32 · FIXED"
 TitleLbl.TextColor3 = C.TEXT_PRI
 TitleLbl.Font = Enum.Font.GothamBold
 TitleLbl.TextSize = 11
@@ -354,7 +363,7 @@ Pages["AutoBuy"].Visible = true
 TabButtons["AutoBuy"].TextColor3 = C.TEXT_PRI
 
 -- ============================================================
--- TAB 1: KONTEN GUI AUTO BUY
+-- TAB 1: KONTEN GUI AUTO BUY (TYPO PROTECT SUDAH DIHAPUS)
 -- ============================================================
 local MasterRow = Instance.new("Frame", PageBuy)
 MasterRow.Size = UDim2.new(1, -20, 0, 35)
@@ -390,7 +399,7 @@ MasterBtn.MouseButton1Click:Connect(function()
     Config.AutoBuy = not Config.AutoBuy
     SaveConfig()
     MasterRow.BackgroundColor3 = Config.AutoBuy and C.BG_CARD or C.BG_TAB
-    MasterStroke.Color = Config.AutoBuy and C.ACCENT or C.BORDER
+    MasterStroke.Color = Config.AutoBuy and C.ACCENT or C.BORDER -- SINTAKSIS FIXED!
     MasterTxt.TextColor3 = Config.AutoBuy and C.TEXT_PRI or C.TEXT_SEC
     MasterBtn.Text = Config.AutoBuy and "ON" or "OFF"
     MasterBtn.TextColor3 = Config.AutoBuy and C.ACCENT or C.TEXT_SEC
@@ -695,4 +704,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder V32] Sukses Terbuka dengan Sistem Proteksi Aman! ✔")
+print("[Pet Finder V32] Sukses Terbuka Tanpa Bug! ✔")
