@@ -1,6 +1,6 @@
 -- ============================================================
 -- GROW A GARDEN: AUTO BUY ONLY + SIMPLE UI (PERSISTENT CONFIG)
--- FITUR TAMBAHAN: EXTREME OPTIMIZER (HAPUS GARDENS DI CLIENT)
+-- FITUR TAMBAHAN: EXTREME OPTIMIZER V2 (SKIP LOADING + NO GARDENS)
 -- Awalan default FALSE (kosong) & otomatis simpan/muat JSON Config
 -- ============================================================
 
@@ -12,17 +12,35 @@ local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
--- [BARU!] ENGINE OPTIMIZER - HAPUS GARDENS BIAR LOADING INSTAN
+-- [BARU!] TURBO LOADER ENGINE - SKIP LOADING & HAPUS GARDENS
 -- ============================================================
 task.spawn(function()
-    -- Tunggu folder Map terload di Workspace
+    -- 1. SKIP & HAPUS GUI LOADING SCREEN GAME COCOK DENGAN SCREENSHOT
+    local function HapusLoadingGame()
+        local LoadingGui = PlayerGui:FindFirstChild("LoadingGui") or PlayerGui:FindFirstChild("LoadingScreen")
+        if LoadingGui then
+            LoadingGui:Destroy()
+            print("[Optimizer] Loading Screen game berhasil di-skip paksa!")
+        end
+    end
+    
+    -- Eksekusi instan dan pasang detektor jika muncul kembali saat hop
+    HapusLoadingGame()
+    PlayerGui.ChildAdded:Connect(function(child)
+        if string.find(child.Name:lower(), "loading") then
+            task.wait()
+            child:Destroy()
+            print("[Optimizer] Loading Screen baru terdeteksi dan langsung di-skip!")
+        end
+    end)
+
+    -- 2. HAPUS FOLDER GARDENS DI CLIENT BIAR FPS TELEPORTASI TURBO
     local ok, Map = pcall(function() return workspace:WaitForChild("Map", 15) end)
     if ok and Map then
-        -- Cari folder Gardens yang bikin berat loading
         local GardensFolder = Map:WaitForChild("Gardens", 10)
         if GardensFolder then
             GardensFolder:Destroy()
-            print("[Optimizer] Folder Gardens berhasil dihapus dari Client! Loading Turbo Aktif.")
+            print("[Optimizer] Folder Gardens berhasil dimusnahkan dari Client!")
         end
     end
 end)
@@ -168,7 +186,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 TitleLbl.Position = UDim2.new(0, 12, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "Auto Buy · Config Saved"
+TitleLbl.Text = "Auto Buy · Turbo Skip"
 TitleLbl.TextColor3 = C.TEXT_PRI
 TitleLbl.Font = Enum.Font.GothamBold
 TitleLbl.TextSize = 12
@@ -380,4 +398,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder] Versi Turbo Optimizer + Save Config Sukses Terload ✔")
+print("[Pet Finder] Versi Turbo Optimizer V2 Sukses Terload ✔")
