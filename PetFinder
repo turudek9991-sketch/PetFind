@@ -1,7 +1,7 @@
 -- ============================================================
 -- GROW A GARDEN: AUTO BUY ONLY + SIMPLE UI (PERSISTENT CONFIG)
+-- FITUR TAMBAHAN: EXTREME OPTIMIZER (HAPUS GARDENS DI CLIENT)
 -- Awalan default FALSE (kosong) & otomatis simpan/muat JSON Config
--- Tanpa Server Hop, Tanpa Firebase/API Database, Sangat Ringan!
 -- ============================================================
 
 local Players         = game:GetService("Players")
@@ -12,12 +12,28 @@ local LocalPlayer     = Players.LocalPlayer
 local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
+-- [BARU!] ENGINE OPTIMIZER - HAPUS GARDENS BIAR LOADING INSTAN
+-- ============================================================
+task.spawn(function()
+    -- Tunggu folder Map terload di Workspace
+    local ok, Map = pcall(function() return workspace:WaitForChild("Map", 15) end)
+    if ok and Map then
+        -- Cari folder Gardens yang bikin berat loading
+        local GardensFolder = Map:WaitForChild("Gardens", 10)
+        if GardensFolder then
+            GardensFolder:Destroy()
+            print("[Optimizer] Folder Gardens berhasil dihapus dari Client! Loading Turbo Aktif.")
+        end
+    end
+end)
+
+-- ============================================================
 -- KONFIGURASI FILE & DEFAULT SETTING (SEMUA FALSE)
 -- ============================================================
 local ConfigFile = "SimpleAutoBuyConfig.json"
 
 local Config = {
-    AutoBuy = false, -- Default awal mati total saat dieksekusi
+    AutoBuy = false, 
     Targets = {
         Frog            = false,
         Bunny           = false,
@@ -195,7 +211,7 @@ MasterPad.PaddingRight = UDim.new(0, 12)
 
 MasterBtn.MouseButton1Click:Connect(function()
     Config.AutoBuy = not Config.AutoBuy
-    SaveConfig() -- Simpan perubahan status utama ke file JSON
+    SaveConfig() 
     
     MasterRow.BackgroundColor3 = Config.AutoBuy and C.BG3 or C.BG2
     MasterStroke.Color = Config.AutoBuy and C.ACCENT or C.BORDER
@@ -264,7 +280,7 @@ for idx, namaPet in ipairs(ListSemuaPet) do
 
     Row.MouseButton1Click:Connect(function()
         Config.Targets[namaPet] = not (Config.Targets[namaPet] or false)
-        SaveConfig() -- Simpan perubahan target pet ke file JSON
+        SaveConfig() 
         
         local aktif = Config.Targets[namaPet]
         Row.BackgroundColor3 = aktif and C.BG3 or C.BG2
@@ -339,14 +355,14 @@ task.spawn(function()
         end
     end
 
-    -- [1] Ambil Pet Lama (Membongkar folder Middle)
+    -- [1] Ambil Pet Lama
     task.defer(function()
         for _, obj in ipairs(PetFolder:GetDescendants()) do
             ProsesObjek(obj)
         end
     end)
 
-    -- [2] Ambil Pet Baru yang Baru Saja Terspawn
+    -- [2] Ambil Pet Baru
     PetFolder.DescendantAdded:Connect(function(newDescendant)
         ProsesObjek(newDescendant)
     end)
@@ -364,4 +380,4 @@ task.spawn(function()
     end)
 end)
 
-print("[Pet Finder] Versi Simple UI + Save Config Sukses Terload ✔")
+print("[Pet Finder] Versi Turbo Optimizer + Save Config Sukses Terload ✔")
