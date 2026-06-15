@@ -28,13 +28,6 @@ local Config = {
     AutoHop = false,
 }
 
--- Forward declaration: dipakai oleh toggle Auto Buy & toggle pet target
--- agar saat diaktifkan langsung mengecek pet yang SUDAH ADA di WildPetSpawns
--- (bukan hanya pet yang baru spawn lewat ChildAdded)
-local WildPetSpawnsFolder = nil
-local CekPetLokal
-local ScanWildPetSpawns
-
 -- ============================================================
 -- METADATA PET
 -- ============================================================
@@ -282,7 +275,7 @@ local TitleLbl = Instance.new("TextLabel", TitleBar)
 TitleLbl.Size             = UDim2.new(1, -80, 1, 0)
 TitleLbl.Position         = UDim2.new(0, 28, 0, 0)
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text             = "Pet Finder · DScripts"
+TitleLbl.Text             = "Pet Finder"
 TitleLbl.TextColor3       = C.TEXT_PRI
 TitleLbl.Font             = Enum.Font.GothamBold
 TitleLbl.TextSize         = 13
@@ -301,19 +294,11 @@ MinBtn.BorderSizePixel  = 0
 Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
 
 -- ── Tab Bar ────────────────────────────────────────────────
-local TabW = 100  -- lebar tiap tab (lebih lega agar "LIVE SERVER" tidak terpotong)
-
-local TabBar = Instance.new("ScrollingFrame", MainFrame)
-TabBar.Size              = UDim2.new(1, -24, 0, 28)
-TabBar.Position          = UDim2.new(0, 12, 0, 46)
-TabBar.BackgroundColor3  = C.BG2
-TabBar.BorderSizePixel   = 0
-TabBar.ClipsDescendants  = true
-TabBar.ScrollingDirection = Enum.ScrollingDirection.X
-TabBar.ScrollBarThickness = 3
-TabBar.ScrollBarImageColor3 = C.BORDER
-TabBar.CanvasSize         = UDim2.new(0, 0, 0, 0)
-TabBar.AutomaticCanvasSize = Enum.AutomaticCanvasSize.X
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size             = UDim2.new(1, -24, 0, 28)
+TabBar.Position         = UDim2.new(0, 12, 0, 46)
+TabBar.BackgroundColor3 = C.BG2
+TabBar.BorderSizePixel  = 0
 Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
 local TabLayout = Instance.new("UIListLayout", TabBar)
@@ -326,7 +311,7 @@ local TabBtns  = {}
 for i, name in ipairs(tabNames) do
     local Tb = Instance.new("TextButton", TabBar)
     Tb.LayoutOrder       = i
-    Tb.Size              = UDim2.new(0, TabW, 1, 0)
+    Tb.Size              = UDim2.new(0, (W - 24) / 3, 1, 0)
     Tb.BackgroundTransparency = 1
     Tb.Text              = name
     Tb.TextColor3        = C.TAB_IDLE
@@ -337,7 +322,7 @@ end
 
 -- Tab indicator underline
 local TabIndicator = Instance.new("Frame", TabBar)
-TabIndicator.Size            = UDim2.new(0, TabW - 16, 0, 2)
+TabIndicator.Size            = UDim2.new(0, (W - 24) / 3 - 16, 0, 2)
 TabIndicator.Position        = UDim2.new(0, 8, 1, -2)
 TabIndicator.BackgroundColor3 = C.ACCENT
 TabIndicator.BorderSizePixel  = 0
