@@ -19,41 +19,62 @@ local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
 local DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1516387782233297007/8yTQuqiEsx6PykRtu7vfeF6iWB8tfBSKpVzz1mDuuW9un5CAqIB-ZSscUpsbpZLk_AgT"
 
 -- ============================================================
--- FORCE FIX KAMERA
+-- FORCE FIX KAMERA (VERSI FIX NYANGKUT)
 -- ============================================================
 task.spawn(function()
-    local CoreLoading = workspace:FindFirstChild("LoadingScreenMenu")
-    if CoreLoading then CoreLoading:Destroy() end
-
-    pcall(function()
-        local Lighting = game:GetService("Lighting")
-        local Blur = Lighting:FindFirstChild("Blur") or workspace.CurrentCamera:FindFirstChild("Blur")
-        if Blur then Blur:Destroy() end
-    end)
-
     local Cam = workspace.CurrentCamera
-    local KoneksiKamera
-    local WaktuMulai = os.clock()
 
-    KoneksiKamera = RunService.RenderStepped:Connect(function()
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildWhichIsA("Humanoid")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
+    -- Fungsi internal untuk reset kamera ke player secara paksa
+    local function ResetKameraKePlayer()
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local hum = char:WaitForChild("Humanoid", 5)
+        local root = char:WaitForChild("HumanoidRootPart", 5)
 
-        if os.clock() - WaktuMulai < 4 then
-            if root and hum then
+        if hum and root then
+            -- Jalankan beberapa kali (loop singkat) agar tidak ketimpa script game
+            for i = 1, 15 do
                 Cam.CameraType = Enum.CameraType.Custom
                 Cam.CameraSubject = hum
                 Cam.FieldOfView = 70
                 root.Anchored = false
-            end
-        else
-            if KoneksiKamera then
-                KoneksiKamera:Disconnect()
-                KoneksiKamera = nil
+                task.wait(0.05)
             end
         end
+    end
+
+    -- 1. Hancurkan loading screen jika sudah ada saat script di-inject
+    local CoreLoading = workspace:FindFirstChild("LoadingScreenMenu")
+    if CoreLoading then 
+        CoreLoading:Destroy() 
+        ResetKameraKePlayer()
+    end
+
+    -- Blur removal
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        local Blur = Lighting:FindFirstChild("Blur") or Cam:FindFirstChild("Blur")
+        if Blur then Blur:Destroy() end
     end)
+
+    -- 2. Deteksi real-time jika loading screen baru muncul lalu di-skip/dihancurkan
+    workspace.ChildRemoved:Connect(function(child)
+        if child.Name == "LoadingScreenMenu" then
+            task.wait(0.1) -- Tunggu sepersekian detik sampai script bawaan game selesai
+            ResetKameraKePlayer()
+        end
+    end)
+
+    -- 3. Failsafe tambahan: Tetap jalankan pemulihan di 5 detik pertama
+    local WaktuMulai = os.clock()
+    while os.clock() - WaktuMulai < 5 do
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+        if hum and Cam.CameraType ~= Enum.CameraType.Custom then
+            Cam.CameraType = Enum.CameraType.Custom
+            Cam.CameraSubject = hum
+        end
+        task.wait(0.5)
+    end
 end)
 
 -- ============================================================
