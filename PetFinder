@@ -1,1 +1,427 @@
-z
+-- ============================================================
+-- GROW A GARDEN: PET FINDER BOT V32 (MODIFIED STABLE EDITION)
+-- Akun khusus: scan pet → kirim Firebase → notif Discord → hop
+-- Anti-collision: bot koordinasi via Firebase agar tidak ke server sama
+-- EDIT: Hanya menambahkan logika tunggu map + camping tier 5/6 + server full skip
+-- ============================================================
+
+local Players         = game:GetService("Players")
+local HttpService     = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer     = Players.LocalPlayer
+
+local FirebaseURL = "https://growagardenpetfinder-default-rtdb.asia-southeast1.firebasedatabase.app/"
+local WebhookURL  = "https://discordapp.com/api/webhooks/1515000444404105237/pRrXHLOqJdWsB_7xqrZQjpMXhI_Nw6L7NGOAg4S89bGECaTQyKi_0er-QKRqNhBUsenS"
+local BotUsername = "DSscripts Pet Finder"
+
+-- ID unik bot ini = JobId server tempat dia berada saat ini
+local BOT_ID = game.JobId
+
+-- TAMBAHAN: History tracker server agar tidak berputar-putar di server yang sama
+shared.VisitedServers = shared.VisitedServers or {}
+shared.VisitedServers[game.JobId] = true
+
+local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
+if not HttpRequest then
+    LocalPlayer:Kick("[PetFinderBot] Executor tidak mendukung HTTP Request!")
+    return
+end
+
+-- ============================================================
+-- METADATA PET
+-- ============================================================
+local PetMetadata = {
+    Frog            = { Tier = 1, Rarity = "Common",    Price = 10000,  Color = 5763719  },
+    Bunny           = { Tier = 1, Rarity = "Common",    Price = 20000,  Color = 5763719  },
+    Owl             = { Tier = 2, Rarity = "Uncommon",  Price = 25000,  Color = 5763719  },
+    Deer            = { Tier = 3, Rarity = "Rare",      Price = 40000,  Color = 5763719  },
+    Robin           = { Tier = 4, Rarity = "Legendary", Price = 75000,  Color = 16776960 },
+    Bee             = { Tier = 4, Rarity = "Legendary", Price = 80000,  Color = 16776960 },
+    Dragonfly       = { Tier = 5, Rarity = "Mythic",    Price = 150000, Color = 15548997 },
+    Monkey          = { Tier = 5, Rarity = "Mythic",    Price = 160000, Color = 15548997 },
+    GoldenDragonfly = { Tier = 5, Rarity = "Mythic",    Price = 200000, Color = 15548997 },
+    Unicorn         = { Tier = 5, Rarity = "Mythic",    Price = 220000, Color = 15548997 },
+    Raccoon         = { Tier = 6, Rarity = "Super",     Price = 500000, Color = 15548997 },
+    BlackDragon     = { Tier = 6, Rarity = "Super",     Price = 750000, Color = 15548997 },
+    IceSerpent      = { Tier = 6, Rarity = "Super",     Price = 800000, Color = 15548997 },
+}
+
+local ListNamaPet = {}
+for nama in pairs(PetMetadata) do table.insert(ListNamaPet, nama) end
+
+-- ============================================================
+-- HELPER: Format angka (10000 → 10,000)
+-- ============================================================
+local function FormatAngka(n)
+    local s, result, count = tostring(math.floor(n)), "", 0
+    for i = #s, 1, -1 do
+        if count > 0 and count % 3 == 0 then result = "," .. result end
+        result = s:sub(i, i) .. result
+        count  = count + 1
+    end
+    return result
+end
+
+-- ============================================================
+-- FIREBASE: Klaim server (anti-collision antar bot)
+-- ============================================================
+local KLAIM_TTL = 30 -- detik
+
+local function KlaimServer(targetJobId)
+    pcall(function()
+        HttpRequest({
+            Url     = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json",
+            Method  = "PUT",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body    = HttpService:JSONEncode({
+                TargetJobId = targetJobId,
+                Timestamp   = os.time(),
+            }),
+        })
+    end)
+end
+
+local function HapusKlaim()
+    pcall(function()
+        HttpRequest({
+            Url    = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json",
+            Method = "DELETE",
+        })
+    end)
+end
+
+local function AmbilServerDiklaim()
+    local diklaim = {}
+    local ok, res = pcall(function()
+        return HttpRequest({ Url = FirebaseURL .. "BotClaims.json", Method = "GET" })
+    end)
+    if not ok or not res or not res.Body then return diklaim end
+
+    local okD, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not okD or type(data) ~= "table" then return diklaim end
+
+    local now = os.time()
+    for botId, info in pairs(data) do
+        if botId ~= BOT_ID 
+        and type(info) == "table"
+        and type(info.TargetJobId) == "string"
+        and type(info.Timestamp) == "number"
+        and (now - info.Timestamp) < KLAIM_TTL then -- klaim masih fresh
+            diklaim[info.TargetJobId] = true
+        end
+    end
+    return diklaim
+end
+
+-- ============================================================
+-- FIREBASE: Kirim & hapus data pet
+-- ============================================================
+local function KirimFirebase(daftarPet)
+    pcall(function()
+        HttpRequest({
+            Url     = FirebaseURL .. "LivePets/" .. game.JobId .. ".json",
+            Method  = "PATCH",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body    = HttpService:JSONEncode(daftarPet),
+        })
+    end)
+end
+
+local function HapusDataServer()
+    pcall(function()
+        HttpRequest({
+            Url    = FirebaseURL .. "LivePets/" .. game.JobId .. ".json",
+            Method = "DELETE",
+        })
+    end)
+end
+
+-- ============================================================
+-- DISCORD WEBHOOK
+-- ============================================================
+local function KirimDiscord(paket, playerCount, maxPlayers, jobId, placeId)
+    local topColor, topTier = 5763719, 0
+    local petList = {}
+
+    for namaPet, _ in pairs(paket) do
+        local meta = PetMetadata[namaPet] or {}
+        if (meta.Tier or 0) > topTier then
+            topTier  = meta.Tier or 0
+            topColor = meta.Color or 5763719
+        end
+        table.insert(petList, { Name = namaPet, Meta = meta })
+    end
+
+    table.sort(petList, function(a, b)
+        if (a.Meta.Tier or 0) ~= (b.Meta.Tier or 0) then
+            return (a.Meta.Tier or 0) > (b.Meta.Tier or 0)
+        end
+        return (a.Meta.Price or 0) > (b.Meta.Price or 0)
+    end)
+
+    local petLines = ""
+    for _, e in ipairs(petList) do
+        petLines = petLines .. string.format("• **%s** — %s · %s\n",
+            e.Name, e.Meta.Rarity or "Common", FormatAngka(e.Meta.Price or 0))
+    end
+
+    local teleportScript = string.format(
+        'game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)',
+        tostring(placeId), tostring(jobId)
+    )
+
+    local embed = {
+        username = BotUsername,
+        embeds   = {{
+            title       = "Pet Spawn",
+            description = string.format("**%d pet spotted**\n\n%s", #petList, petLines),
+            color       = topColor,
+            fields      = {
+                { name = "Players",         value = string.format("%d/%d", playerCount, maxPlayers), inline = true  },
+                { name = "Place ID",        value = tostring(placeId),                               inline = true  },
+                { name = "Server (Job ID)", value = string.format("`%s`", tostring(jobId)),          inline = false },
+                { name = "Link Execute",    value = string.format("```lua\n%s\n```", teleportScript),inline = false },
+            },
+            footer    = { text = BotUsername .. " • Pet Finder" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        }}
+    }
+
+    pcall(function()
+        HttpRequest({
+            Url     = WebhookURL,
+            Method  = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body    = HttpService:JSONEncode(embed),
+        })
+    end)
+end
+
+-- ============================================================
+-- HOP SERVER
+-- ============================================================
+local teleportBerhasil = false
+
+TeleportService.TeleportInitFailed:Connect(function(player, reason)
+    if player == LocalPlayer then
+        warn("[Bot] TeleportInitFailed: " .. tostring(reason))
+        teleportBerhasil = false
+    end
+end)
+
+local function AcakTabel(t)
+    for i = #t, 2, -1 do
+        local j = math.random(1, i)
+        t[i], t[j] = t[j], t[i]
+    end
+    return t
+end
+
+local function AmbilSemuaServerKosong()
+    local list   = {}
+    local cursor = ""
+    repeat
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId
+            .. "/servers/Public?sortOrder=Asc&limit=100"
+            .. (cursor ~= "" and ("&cursor=" .. cursor) or "")
+
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        if not ok or not result or type(result.data) ~= "table" then break end
+
+        for _, srv in ipairs(result.data) do
+            if srv.id ~= game.JobId
+            and not shared.VisitedServers[srv.id] -- MODIFIKASI: Jangan masuki server history yang sama
+            and type(srv.playing) == "number"
+            and type(srv.maxPlayers) == "number"
+            and srv.playing < srv.maxPlayers then
+                table.insert(list, srv.id)
+            end
+        end
+
+        cursor = (type(result.nextPageCursor) == "string" and result.nextPageCursor) or ""
+    until cursor == "" or cursor == "null"
+
+    return list
+end
+
+local function HopServer()
+    teleportBerhasil = false
+    HapusKlaim()  -- bersihkan klaim lama sebelum mulai
+
+    print("[Bot] Memulai hop server...")
+
+    while not teleportBerhasil do
+        local servers = AmbilSemuaServerKosong()
+        if #servers == 0 then
+            print("[Bot] Tidak ada server kosong baru, reset history filter & retry...")
+            shared.VisitedServers = {} -- Reset penampung jika semua opsi server habis
+            task.wait(5)
+            continue
+        end
+
+        AcakTabel(servers)
+        local serverDiklaim = AmbilServerDiklaim()
+        print(string.format("[Bot] %d server kosong, %d diklaim bot lain", 
+            #servers, (function() local n=0 for _ in pairs(serverDiklaim) do n=n+1 end return n end)()))
+
+        local adaCandidateBaru = false
+
+        for _, jobId in ipairs(servers) do
+            if teleportBerhasil then break end
+            if serverDiklaim[jobId] then
+                print("[Bot] Skip " .. string.sub(jobId, 1, 8) .. "… (diklaim bot lain)")
+                continue
+            end
+
+            adaCandidateBaru = true
+            KlaimServer(jobId)
+            print("[Bot] Klaim + teleport ke " .. string.sub(jobId, 1, 8) .. "…")
+
+            local ok, err = pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, LocalPlayer)
+            end)
+
+            if ok then
+                task.wait(10)
+                if not teleportBerhasil then
+                    print("[Bot] Timeout teleport, hapus klaim, coba server lain...")
+                    HapusKlaim()
+                    task.wait(1)
+                end
+            else
+                warn("[Bot] pcall error: " .. tostring(err))
+                HapusKlaim()
+                task.wait(1)
+            end
+        end
+
+        if not teleportBerhasil then
+            task.wait(5)
+        end
+    end
+end
+
+-- ============================================================
+-- UTILITY SCANNER modular
+-- ============================================================
+local function JalankanScanWorkspace(PetFolder)
+    local paket       = {}
+    local PlayerCount = #Players:GetPlayers()
+    local MaxPlayers  = Players.MaxPlayers
+
+    for _, obj in ipairs(PetFolder:GetChildren()) do
+        local namaLower = obj.Name:lower()
+        for _, namaPet in ipairs(ListNamaPet) do
+            if string.find(namaLower, namaPet:lower()) then
+                if not paket[namaPet] then
+                    local part = obj:IsA("BasePart") and obj
+                              or obj:FindFirstChildWhichIsA("BasePart", true)
+                              or obj.PrimaryPart
+                    if part then
+                        local meta = PetMetadata[namaPet] or { Tier = 1 }
+                        paket[namaPet] = {
+                            PetName        = namaPet,
+                            Tier           = meta.Tier,
+                            Rarity         = meta.Rarity or "Common",
+                            JobId          = game.JobId,
+                            PlaceId        = game.PlaceId,
+                            Position       = { X = part.CFrame.X, Y = part.CFrame.Y, Z = part.CFrame.Z },
+                            Timestamp      = os.time(),
+                            CurrentPlayers = PlayerCount,
+                            MaxPlayers     = MaxPlayers,
+                        }
+                    end
+                end
+                break
+            end
+        end
+    end
+    return paket
+end
+
+-- ============================================================
+-- FUNGSI UTAMA: Scan → Firebase → Discord → Hop
+-- ============================================================
+local function ScanDanHop()
+    -- MODIFIKASI FIX: Ganti WaitForChild kaku dengan wait safety loop agar executor tidak crash mendarat
+    local MapFolder = workspace:WaitForChild("Map", 20)
+    local PetFolder = MapFolder and MapFolder:WaitForChild("WildPetSpawns", 20)
+
+    if not PetFolder then
+        warn("[Bot] WildPetSpawns tidak ditemukan, hop...")
+        HopServer()
+        return
+    end
+
+    -- MODIFIKASI BARU: Jika server penuh, bot langsung kabur tanpa membuang kuota data API
+    if #Players:GetPlayers() >= Players.MaxPlayers then
+        print("[Bot Skip] Server Full. Langsung pindah...")
+        HopServer()
+        return
+    end
+
+    local paket = JalankanScanWorkspace(PetFolder)
+    local adaPetBernilaiTinggi = false
+
+    -- Cek kriteria Tier 5 (Mythic) atau Tier 6 (Super)
+    for _, data in pairs(paket) do
+        if data.Tier and data.Tier >= 5 then
+            adaPetBernilaiTinggi = true
+            break
+        end
+    end
+
+    if next(paket) ~= nil then
+        KirimFirebase(paket)
+        print("[Bot] Firebase: OK")
+        KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+        print("[Bot] Discord: OK")
+        
+        -- MODIFIKASI FIX JEDA: Kasih napas 1.5 detik agar paket HTTP tersalurkan penuh ke internet
+        task.wait(1.5)
+
+        -- MODIFIKASI UTAMA: CAMPING SYSTEM (JANGAN HOP JIKA ADA MYTHIC/SUPER)
+        if adaPetBernilaiTinggi then
+            print("[Bot Mode Camp] Mengunci posisi server karena ada target berharga...")
+            while adaPetBernilaiTinggi do
+                task.wait(3) -- Re-scan ulang kondisi map per 3 detik
+                local updatePaket = JalankanScanWorkspace(PetFolder)
+                
+                adaPetBernilaiTinggi = false
+                for _, data in pairs(updatePaket) do
+                    if data.Tier and data.Tier >= 5 then
+                        adaPetBernilaiTinggi = true
+                        break
+                    end
+                end
+                
+                if adaPetBernilaiTinggi then
+                    KirimFirebase(updatePaket) -- Refresh perpanjangan status data di radar panel
+                else
+                    print("[Bot Mode Camp] Target sudah hilang/di-snipe. Bersihkan API & Hop.")
+                    HapusDataServer()
+                end
+            end
+        else
+            -- Pet Tier rendah biasa (Tier 1-4): Tunggu 4 detik bawaan aslimu, hapus data, lalu pergi
+            task.wait(4)
+            HapusDataServer()
+        end
+    else
+        print("[Bot] Tidak ada pet ditemukan.")
+        task.wait(0.5)
+    end
+
+    HopServer()
+end
+
+-- Saat bot ini keluar/disconnect, hapus klaimnya
+game:GetService("Players").LocalPlayer.AncestryChanged:Connect(function()
+    HapusKlaim()
+end)
+
+-- MODIFIKASI FIX JEDA LOADING: Berikan toleransi 5 detik agar instansiasi map kelar dibaca executor
+task.delay(5, ScanDanHop)
+print("[PetFinderBot V34-Modified] Standby Inisialisasi Database...")
