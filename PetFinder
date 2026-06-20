@@ -334,7 +334,7 @@ local function JalankanScanWorkspace(PetFolder)
 end
 
 -- ============================================================
--- MAIN BOT LOGIC (INTELLIGENT HOPPING - FIXED PLAYER COUNT)
+-- MAIN BOT LOGIC (INTELLIGENT HOPPING - 2X SCAN MODE)
 -- ============================================================
 local function ScanDanHop()
     DaftarkanKehadiranAktif()
@@ -344,48 +344,58 @@ local function ScanDanHop()
 
     if not PetFolder then
         warn("[Bot] WildPetSpawns tidak ditemukan, hop...")
-        HapusDataServer() -- Pastikan bersih sebelum hop
-        HopServer()
-        return
-    end
-
-    -- Jalankan scanner data detail pet terlebih dahulu secara kilat
-    local paket = JalankanScanWorkspace(PetFolder)
-    local adaPetBernilaiTinggi = false
-
-    for _, data in pairs(paket) do
-        if data.Tier and data.Tier >= 5 then
-            adaPetBernilaiTinggi = true
-            break
-        end
-    end
-
-    -- KOREKSI ATURAN RAMAI: Jika pemain >= 6 orang
-    if #Players:GetPlayers() >= 6 then
-        if adaPetBernilaiTinggi then
-            -- Meskipun ramai, kalau ada Mythic/Super tetep lapor Discord & Firebase!
-            print("[Bot Ramai] Server ramai tapi ADA PET LANGKA! Kirim data...")
-            KirimFirebase(paket)
-            KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-            task.wait(10) -- Kasih waktu akun utama join
-            HapusDataServer()
-        else
-            -- Kalau ramai dan isinya cuma pet ampas, langsung bersihkan firebase dan kabur!
-            print("[Bot Skip] Server ramai (" .. tostring(#Players:GetPlayers()) .. " pemain) & tidak ada pet langka. Langsung hop...")
-            HapusDataServer()
-        end
+        HapusDataServer()
         HopServer()
         return
     end
 
     -- ============================================================
-    -- JIKA SERVER SEPI (< 6 Pemain), LANJUTKAN LOGIKA DI BAWAH INI
+    -- SCAN 1: KONDISI AWAL PAS BARU JOIN
+    -- ============================================================
+    local paket = JalankanScanWorkspace(PetFolder)
+    local adaPetBernilaiTinggi = false
+
+    for _, data in pairs(paket) do
+        if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
+    end
+
+    -- PROTEKSI RAMAI: Jika pemain >= 6 orang
+    if #Players:GetPlayers() >= 6 then
+        if adaPetBernilaiTinggi then
+            print("[Bot Ramai] Server ramai tapi ADA PET LANGKA di Scan 1! Kirim data...")
+            KirimFirebase(paket)
+            KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+            task.wait(10)
+        end
+        HapusDataServer()
+        HopServer()
+        return
+    end
+
+    -- KIRIM DATA SCAN 1 (Kondisi Awal Server Sepi)
+    if next(paket) ~= nil then
+        print("[Bot Scan 1] Mengirim data awal ke Firebase & Discord...")
+        KirimFirebase(paket)
+        KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+        task.wait(1.5)
+        
+        -- Jika dari awal sudah ada Mythic/Super, langsung kunci 10 detik untuk akun utama
+        if adaPetBernilaiTinggi then
+            print("[Bot Scan 1] Target tinggi terdeteksi di awal! Menahan 10 detik...")
+            task.wait(10)
+        end
+    else
+        print("[Bot Scan 1] Server kosong/tidak ada pet yang cocok saat join.")
+    end
+
+    -- ============================================================
+    -- LOGIKA TUNGGU SPAWN (JIKA PET < 4)
     -- ============================================================
     local totalObjekPet = HitungTotalPetDiWorkspace(PetFolder)
     print("[Bot Scan] Total pet saat ini di server: " .. tostring(totalObjekPet))
 
     if totalObjekPet < 4 then
-        print("[Bot Mode Tunggu] Pet di bawah 4. Menunggu pet baru spawn...")
+        print("[Bot Mode Tunggu] Pet kurang dari 4. Menunggu pet baru spawn...")
         local targetPetSetelahSpawn = totalObjekPet + 1
         
         local timeout = 0
@@ -399,52 +409,58 @@ local function ScanDanHop()
                 return
             end
         end
-        print("[Bot Mode Tunggu] Pet baru terdeteksi spawn!")
-        -- Scan ulang setelah ada yang spawn
-        paket = JalankanScanWorkspace(PetFolder)
+
+        -- ============================================================
+        -- SCAN 2: SETELAH PET BARU BERHASIL SPAWN
+        -- ============================================================
+        print("[Bot Mode Tunggu] Pet baru terdeteksi spawn! Menjalankan SCAN 2...")
+        task.wait(1) -- Beri jeda 1 detik agar objek ter-render sempurna
+        
+        paket = JalankanScanWorkspace(PetFolder) -- Ambil data terbaru
+        adaPetBernilaiTinggi = false
         for _, data in pairs(paket) do
             if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
         end
+
+        if next(paket) ~= nil then
+            print("[Bot Scan 2] Mengirim data terbaru setelah spawn ke Firebase & Discord...")
+            KirimFirebase(paket)
+            KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+            task.wait(1.5)
+            
+            -- Jika setelah spawn baru muncul Mythic/Super, tahan lagi 10 detik
+            if adaPetBernilaiTinggi then
+                print("[Bot Scan 2] Target tinggi muncul setelah spawn! Menahan 10 detik...")
+                task.wait(10)
+            end
+        end
     end
 
-    -- Proses normal untuk server sepi
-    if next(paket) ~= nil then
-        KirimFirebase(paket)
-        print("[Bot] Firebase: OK")
-        KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-        print("[Bot] Discord: OK")
-        task.wait(1.5)
-
-        if adaPetBernilaiTinggi then
-            print("[Bot Tahan Server] TARGET TINGGI TERDETEKSI! Menahan server selama 10 detik...")
-            task.wait(10)
-            
-            print("[Bot Mode Camp] Memasuki pemantauan camp...")
-            while adaPetBernilaiTinggi do
-                task.wait(3)
-                if #Players:GetPlayers() >= 6 then break end 
-                local updatePaket = JalankanScanWorkspace(PetFolder)
-                adaPetBernilaiTinggi = false
-                for _, data in pairs(updatePaket) do
-                    if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
-                end
-                if adaPetBernilaiTinggi then
-                    KirimFirebase(updatePaket)
-                else
-                    print("[Bot Mode Camp] Target hilang. Siap pindah.")
-                    HapusDataServer()
-                end
+    -- ============================================================
+    -- PROSES CAMPING / LEAVE SERVER
+    -- ============================================================
+    if adaPetBernilaiTinggi then
+        print("[Bot Mode Camp] Target tinggi aktif, memulai pemantauan berkala...")
+        while adaPetBernilaiTinggi do
+            task.wait(3)
+            if #Players:GetPlayers() >= 6 then break end 
+            local updatePaket = JalankanScanWorkspace(PetFolder)
+            adaPetBernilaiTinggi = false
+            for _, data in pairs(updatePaket) do
+                if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
             end
-        else
-            task.wait(2)
-            HapusDataServer()
+            if adaPetBernilaiTinggi then
+                KirimFirebase(updatePaket)
+            else
+                print("[Bot Mode Camp] Target sudah hilang/diambil. Siap pindah.")
+            end
         end
     else
-        print("[Bot] Tidak ada jenis metadata pet yang cocok.")
-        HapusDataServer()
-        task.wait(0.5)
+        print("[Bot Selesai] Tidak ada pet langka yang menetap. Berkemas...")
+        task.wait(1)
     end
 
+    HapusDataServer()
     HopServer()
 end
 
