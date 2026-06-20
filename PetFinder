@@ -1,6 +1,6 @@
 -- ============================================================
--- GROW A GARDEN: PET FINDER BOT V35 (STABLE FINAL EDITION)
--- Base: Script V32 Anti-Eror + Fitur Baru + Anti-Lag Super Aman
+-- GROW A GARDEN: PET FINDER BOT V36 (DYNAMIC SPAWN & INFANTRY)
+-- Base: V32 Stable + Perbaikan Deteksi Naik/Turun Pet + Max Player 8
 -- ============================================================
 
 local Players         = game:GetService("Players")
@@ -30,7 +30,6 @@ task.spawn(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
     task.wait(0.5)
 
-    -- [1] Bypass loading screen
     local function BypassLoading()
         pcall(function()
             local ls = workspace:FindFirstChild("LoadingScreenMenu")
@@ -58,38 +57,17 @@ task.spawn(function()
                 end
             end
         end)
-        pcall(function()
-            local Cam = workspace.CurrentCamera
-            local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-            local hum  = char:WaitForChild("Humanoid", 5)
-            local root = char:WaitForChild("HumanoidRootPart", 5)
-            if Cam and hum and root then
-                Cam.CameraType    = Enum.CameraType.Custom
-                Cam.CameraSubject = hum
-                Cam.FieldOfView   = 70
-                root.Anchored     = false
-            end
-        end)
     end
 
-    -- [2] Optimasi render global
     local function OptimRender()
         pcall(function() settings().Rendering.QualityLevel = 1 end)
         pcall(function()
             local L = game:GetService("Lighting")
             L.GlobalShadows = false; L.FogEnd = 100000; L.Brightness = 2
-            for _, efek in ipairs(L:GetChildren()) do
-                if efek:IsA("BlurEffect") or efek:IsA("DepthOfFieldEffect") or
-                   efek:IsA("SunRaysEffect") or efek:IsA("ColorCorrectionEffect") or
-                   efek:IsA("BloomEffect") then
-                    efek:Destroy()
-                end
-            end
         end)
         pcall(function() workspace.Terrain.Decoration = false end)
     end
 
-    -- [3] Hapus folder visual di workspace (Aman, tidak menyentuh Map/WildPetSpawns)
     local NUKE_WS = {
         "BirdVisuals","Birds","BlizzardBeams","GnomeVisuals","Gnomes",
         "Handles","LightningEffects","DroppedItems","Fences","Folder",
@@ -104,77 +82,11 @@ task.spawn(function()
                 if f then f:Destroy() end
             end)
         end
-        workspace.ChildAdded:Connect(function(child)
-            pcall(function()
-                for _, nama in ipairs(NUKE_WS) do
-                    if child.Name == nama then
-                        task.wait(0.1)
-                        child:Destroy()
-                        break
-                    end
-                end
-            end)
-        end)
-    end
-
-    -- [4] Bersihkan Plot di Gardens (tanaman + buah)
-    local FOLDER_BUAH = {
-        "Fruits","FruitSpawnLocations","FruitVisuals",
-        "PlantVisuals","GrowthVisuals","Effects","Plants",
-    }
-    local function IsFolderBuah(nama)
-        for _, fb in ipairs(FOLDER_BUAH) do if nama == fb then return true end end
-        return false
-    end
-    local function MatikanObj(obj)
-        pcall(function()
-            if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-                obj.Transparency = 1; obj.CastShadow = false
-            end
-            if obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency = 1 end
-            if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or
-               obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then obj.Enabled = false end
-            if obj:IsA("PointLight") or obj:IsA("SurfaceLight") or obj:IsA("SpotLight") then obj.Enabled = false end
-            if obj:IsA("Sound") then obj.Volume = 0 end
-        end)
-    end
-    local function BersihkanPlot(plot)
-        pcall(function()
-            for _, desc in ipairs(plot:GetDescendants()) do
-                if IsFolderBuah(desc.Name) then desc:Destroy() end
-            end
-            for _, desc in ipairs(plot:GetDescendants()) do MatikanObj(desc) end
-            if plot:IsA("BasePart") then plot.Transparency = 1; plot.CastShadow = false end
-        end)
-        plot.DescendantAdded:Connect(function(desc)
-            pcall(function()
-                task.wait(0.02)
-                if not desc or not desc.Parent then return end
-                if IsFolderBuah(desc.Name) or (desc.Parent and IsFolderBuah(desc.Parent.Name)) then
-                    desc:Destroy()
-                    return
-                end
-                MatikanObj(desc)
-            end)
-        end)
-    end
-    local function HapusPlot()
-        pcall(function()
-            local Gardens = workspace:FindFirstChild("Gardens") or workspace:WaitForChild("Gardens", 5)
-            if not Gardens then return end
-            for _, child in ipairs(Gardens:GetChildren()) do
-                if string.match(child.Name, "^Plot") then BersihkanPlot(child) end
-            end
-            Gardens.ChildAdded:Connect(function(child)
-                if string.match(child.Name, "^Plot") then task.wait(0.2); BersihkanPlot(child) end
-            end)
-        end)
     end
 
     BypassLoading()
     OptimRender()
     NukeWorkspace()
-    HapusPlot()
     print("[DScripts V5] Anti Lag Gabungan Aktif ✔")
 end)
 
@@ -201,9 +113,6 @@ local PetMetadata = {
 local ListNamaPet = {}
 for nama in pairs(PetMetadata) do table.insert(ListNamaPet, nama) end
 
--- ============================================================
--- HELPER
--- ============================================================
 local function FormatAngka(n)
     local s, result, count = tostring(math.floor(n)), "", 0
     for i = #s, 1, -1 do
@@ -215,7 +124,7 @@ local function FormatAngka(n)
 end
 
 -- ============================================================
--- FIREBASE
+-- FIREBASE API MECHANICS
 -- ============================================================
 local KLAIM_TTL = 30
 
@@ -231,25 +140,18 @@ local function KlaimServer(targetJobId)
 end
 
 local function HapusKlaim()
-    pcall(function()
-        HttpRequest({ Url = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json", Method = "DELETE" })
-    end)
+    pcall(function() HttpRequest({ Url = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json", Method = "DELETE" }) end)
 end
 
 local function AmbilServerDiklaim()
     local diklaim = {}
-    local ok, res = pcall(function()
-        return HttpRequest({ Url = FirebaseURL .. "BotClaims.json", Method = "GET" })
-    end)
+    local ok, res = pcall(function() return HttpRequest({ Url = FirebaseURL .. "BotClaims.json", Method = "GET" }) end)
     if not ok or not res or not res.Body then return diklaim end
     local okD, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
     if not okD or type(data) ~= "table" then return diklaim end
     local now = os.time()
     for botId, info in pairs(data) do
-        if botId ~= BOT_ID and type(info) == "table"
-        and type(info.TargetJobId) == "string"
-        and type(info.Timestamp) == "number"
-        and (now - info.Timestamp) < KLAIM_TTL then
+        if botId ~= BOT_ID and type(info) == "table" and type(info.TargetJobId) == "string" and type(info.Timestamp) == "number" and (now - info.Timestamp) < KLAIM_TTL then
             diklaim[info.TargetJobId] = true
         end
     end
@@ -257,14 +159,7 @@ local function AmbilServerDiklaim()
 end
 
 local function DaftarkanKehadiranAktif()
-    pcall(function()
-        HttpRequest({
-            Url     = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json",
-            Method  = "PUT",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = HttpService:JSONEncode({ Timestamp = os.time() }),
-        })
-    end)
+    pcall(function() HttpRequest({ Url = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json", Method = "PUT", Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ Timestamp = os.time() }) }) end)
 end
 
 local function AmbilDaftarBotAktif()
@@ -293,15 +188,13 @@ local function KirimFirebase(daftarPet)
 end
 
 local function HapusDataServer()
-    pcall(function()
-        HttpRequest({ Url = FirebaseURL .. "LivePets/" .. game.JobId .. ".json", Method = "DELETE" })
-    end)
+    pcall(function() HttpRequest({ Url = FirebaseURL .. "LivePets/" .. game.JobId .. ".json", Method = "DELETE" }) end)
 end
 
 -- ============================================================
--- DISCORD WEBHOOK
+-- DISCORD WEBHOOK SYSTEM
 -- ============================================================
-local function KirimDiscord(paket, playerCount, maxPlayers, jobId, placeId)
+local function KirimDiscord(paket, titleTag, playerCount, maxPlayers, jobId, placeId)
     local topColor, topTier = 5763719, 0
     local petList = {}
 
@@ -315,27 +208,21 @@ local function KirimDiscord(paket, playerCount, maxPlayers, jobId, placeId)
     end
 
     table.sort(petList, function(a, b)
-        if (a.Meta.Tier or 0) ~= (b.Meta.Tier or 0) then
-            return (a.Meta.Tier or 0) > (b.Meta.Tier or 0)
-        end
+        if (a.Meta.Tier or 0) ~= (b.Meta.Tier or 0) then return (a.Meta.Tier or 0) > (b.Meta.Tier or 0) end
         return (a.Meta.Price or 0) > (b.Meta.Price or 0)
     end)
 
     local petLines = ""
     for _, e in ipairs(petList) do
-        petLines = petLines .. string.format("• **%s** — %s · %s\n",
-            e.Name, e.Meta.Rarity or "Common", FormatAngka(e.Meta.Price or 0))
+        petLines = petLines .. string.format("• **%s** — %s · %s\n", e.Name, e.Meta.Rarity or "Common", FormatAngka(e.Meta.Price or 0))
     end
 
-    local teleportScript = string.format(
-        'game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)',
-        tostring(placeId), tostring(jobId)
-    )
+    local teleportScript = string.format('game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)', tostring(placeId), tostring(jobId))
 
     local embed = {
         username = BotUsername,
         embeds   = {{
-            title       = "Pet Spawn",
+            title       = "Pet Spawn — " .. tostring(titleTag),
             description = string.format("**%d pet spotted**\n\n%s", #petList, petLines),
             color       = topColor,
             fields      = {
@@ -360,22 +247,15 @@ local function KirimDiscord(paket, playerCount, maxPlayers, jobId, placeId)
 end
 
 -- ============================================================
--- HOP SERVER (DENGAN TEKNIK SINKRONISASI ANTI-BOT COLLISION)
+-- SERVER HOPPING ROUTINE
 -- ============================================================
 local teleportBerhasil = false
-
 TeleportService.TeleportInitFailed:Connect(function(player, reason)
-    if player == LocalPlayer then
-        warn("[Bot] TeleportInitFailed: " .. tostring(reason))
-        teleportBerhasil = false
-    end
+    if player == LocalPlayer then teleportBerhasil = false end
 end)
 
 local function AcakTabel(t)
-    for i = #t, 2, -1 do
-        local j = math.random(1, i)
-        t[i], t[j] = t[j], t[i]
-    end
+    for i = #t, 2, -1 do local j = math.random(1, i) t[i], t[j] = t[j], t[i] end
     return t
 end
 
@@ -383,19 +263,11 @@ local function AmbilSemuaServerKosong()
     local list   = {}
     local cursor = ""
     repeat
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId
-            .. "/servers/Public?sortOrder=Asc&limit=100"
-            .. (cursor ~= "" and ("&cursor=" .. cursor) or "")
-        local ok, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(url))
-        end)
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (cursor ~= "" and ("&cursor=" .. cursor) or "")
+        local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(url)) end)
         if not ok or not result or type(result.data) ~= "table" then break end
         for _, srv in ipairs(result.data) do
-            if srv.id ~= game.JobId
-            and not shared.VisitedServers[srv.id]
-            and type(srv.playing) == "number"
-            and type(srv.maxPlayers) == "number"
-            and srv.playing < srv.maxPlayers then
+            if srv.id ~= game.JobId and not shared.VisitedServers[srv.id] and type(srv.playing) == "number" and type(srv.maxPlayers) == "number" and srv.playing < srv.maxPlayers then
                 table.insert(list, srv.id)
             end
         end
@@ -412,7 +284,6 @@ local function HopServer()
     while not teleportBerhasil do
         local servers = AmbilSemuaServerKosong()
         if #servers == 0 then
-            print("[Bot] Tidak ada server kosong baru, reset history & retry...")
             shared.VisitedServers = {}
             task.wait(4)
             continue
@@ -423,19 +294,14 @@ local function HopServer()
         
         for _, jobId in ipairs(servers) do
             if teleportBerhasil then break end
-            -- Anti-collision check
             if serverDiklaim[jobId] or serverBotAktif[jobId] then continue end
             
             KlaimServer(jobId)
-            print("[Bot] Klaim + teleport ke " .. string.sub(jobId, 1, 8) .. "…")
-            local ok, err = pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, LocalPlayer)
-            end)
+            local ok, err = pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, LocalPlayer) end)
             if ok then
                 task.wait(10)
                 if not teleportBerhasil then HapusKlaim(); task.wait(1) end
             else
-                warn("[Bot] pcall error: " .. tostring(err))
                 HapusKlaim(); task.wait(1)
             end
         end
@@ -444,7 +310,7 @@ local function HopServer()
 end
 
 -- ============================================================
--- SCANNER METHOD
+-- SCANNER INTERACTION
 -- ============================================================
 local function HitungTotalPetDiWorkspace(PetFolder)
     return #PetFolder:GetChildren()
@@ -460,9 +326,7 @@ local function JalankanScanWorkspace(PetFolder)
         for _, namaPet in ipairs(ListNamaPet) do
             if string.find(namaLower, namaPet:lower()) then
                 if not paket[namaPet] then
-                    local part = obj:IsA("BasePart") and obj
-                              or obj:FindFirstChildWhichIsA("BasePart", true)
-                              or obj.PrimaryPart
+                    local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true) or obj.PrimaryPart
                     if part then
                         local meta = PetMetadata[namaPet] or { Tier = 1 }
                         paket[namaPet] = {
@@ -486,7 +350,7 @@ local function JalankanScanWorkspace(PetFolder)
 end
 
 -- ============================================================
--- MAIN CONTROL LOGIC (INTELLIGENT 2X SCAN IMPLEMENTATION)
+-- MAIN ENGINE CONTROL (INTELLIGENT 2X SCAN - V36)
 -- ============================================================
 local function ScanDanHop()
     DaftarkanKehadiranAktif()
@@ -495,132 +359,117 @@ local function ScanDanHop()
     local PetFolder = MapFolder and MapFolder:WaitForChild("WildPetSpawns", 20)
 
     if not PetFolder then
-        warn("[Bot] WildPetSpawns tidak ditemukan, hop...")
         HapusDataServer()
         HopServer()
         return
     end
 
     -- --------------------------------------------------------
-    -- SCAN 1: KONDISI PAS AWAL BARU MASUK SERVER
+    -- SCAN 1: KONDISI AWAL PAS MASUK SERVER
     -- --------------------------------------------------------
     local paket = JalankanScanWorkspace(PetFolder)
     local adaPetBernilaiTinggi = false
 
     for _, data in pairs(paket) do
-        if data.Tier and data.Tier >= 5 then
-            adaPetBernilaiTinggi = true
-            break
-        end
+        if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
     end
 
-    -- ATURAN 1: Jika server berisi 6 orang atau lebih (Ramai)
-    if #Players:GetPlayers() >= 6 then
+    -- ATURAN UTAMA 1: UPDATE MAKSIMAL PLAYER DI SERVER ADALAH 8
+    if #Players:GetPlayers() >= 8 then
+        print("[Bot Ramai] Player >= 8. Mengecek pet berharga...")
         if adaPetBernilaiTinggi then
-            print("[Bot Ramai] Server ramai tapi ADA PET LANGKA! Kirim data...")
             KirimFirebase(paket)
-            KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-            task.wait(10) -- Tahan 10 detik biar akun utama bisa join
+            KirimDiscord(paket, "Scan 1 (Server Ramai >8)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+            task.wait(10) -- Tetap tahan 10 detik jika ada Mythic/Super
         end
         HapusDataServer()
         HopServer()
         return
     end
 
-    -- Kirim data laporan awal SCAN 1 (Untuk Server sepi < 6 orang)
+    -- Jalankan Kirim Laporan SCAN 1 (Untuk server sepi < 8 orang)
     if next(paket) ~= nil then
         print("[Bot Scan 1] Mengirim data awal ke Firebase & Discord...")
         KirimFirebase(paket)
-        KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+        KirimDiscord(paket, "Scan 1 (Awal)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
         task.wait(1.5)
 
         if adaPetBernilaiTinggi then
-            print("[Bot Scan 1] Target Mythic/Super didapat di awal! Menahan 10 detik...")
+            print("[Bot Scan 1] Ada Mythic/Super di awal! Menahan server 10 detik...")
             task.wait(10)
+            HapusDataServer()
+            HopServer()
+            return
         end
-    else
-        print("[Bot Scan 1] Tidak ada jenis pet ber-metadata pas awal join.")
     end
 
     -- --------------------------------------------------------
-    -- ATURAN 2: TUNGGU SPAWN JIKA TOTAL PET DI WORKSPACE < 4
+    -- ATURAN 2 & 4: LOGIKA TUNGGU SPAWN DENGAN ANTISIPASI NAIK/TURUN PET
     -- --------------------------------------------------------
-    local totalObjekPet = HitungTotalPetDiWorkspace(PetFolder)
-    print("[Bot Scan] Total pet saat ini di server: " .. tostring(totalObjekPet))
+    local jumlahAwalPet = HitungTotalPetDiWorkspace(PetFolder)
+    print("[Bot Radar] Jumlah awal pet di server: " .. tostring(jumlahAwalPet))
 
-    if totalObjekPet < 4 then
-        print("[Bot Mode Tunggu] Pet kurang dari 4. Menunggu pet baru spawn...")
-        local targetPetSetelahSpawn = totalObjekPet + 1
+    if jumlahAwalPet < 4 then
+        print("[Bot Mode Tunggu] Jumlah pet di bawah 4. Memantau spawn baru...")
         
+        local statusTungguSelesai = false
         local timeout = 0
-        while HitungTotalPetDiWorkspace(PetFolder) < targetPetSetelahSpawn and timeout < 120 do
+        
+        while timeout < 120 and not statusTungguSelesai do
             task.wait(2)
             timeout = timeout + 2
             
-            -- Jika di tengah jalan server mendadak ramai >= 6 orang, langsung batalkan
-            if #Players:GetPlayers() >= 6 then
-                print("[Bot Cancel Tunggu] Server mendadak ramai, langsung hop!")
-                HapusDataServer()
-                HopServer()
-                return
-            end
-        end
-
-        -- --------------------------------------------------------
-        -- SCAN 2: EKSEKUSI DATA ULANG SETELAH PET BARU SPAWN
-        -- --------------------------------------------------------
-        print("[Bot Mode Tunggu] Pet baru terbit! Menjalankan SCAN 2...")
-        task.wait(1.5) -- Jeda aman agar mesh data objek ter-load utuh
-        
-        paket = JalankanScanWorkspace(PetFolder) -- Ambil struktur tabel terbaru
-        adaPetBernilaiTinggi = false
-        for _, data in pairs(paket) do
-            if data.Tier and data.Tier >= 5 then
-                adaPetBernilaiTinggi = true
+            local jumlahSekarang = HitungTotalPetDiWorkspace(PetFolder)
+            
+            -- PROTEKSI RAMAI DI TENGAH JALAN
+            if #Players:GetPlayers() >= 8 then
+                print("[Bot Cancel] Server mendadak penuh >= 8 orang, abort!")
                 break
             end
-        end
-
-        if next(paket) ~= nil then
-            print("[Bot Scan 2] Mengirim data terbaru setelah spawn ke Firebase & Discord...")
-            KirimFirebase(paket)
-            KirimDiscord(paket, #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-            task.wait(1.5)
-
-            if adaPetBernilaiTinggi then
-                print("[Bot Scan 2] Target Mythic/Super muncul pasca spawn! Menahan 10 detik...")
-                task.wait(10)
+            
+            -- ATURAN 4: JIKA PET MALAH BERKURANG (DIBELI ORANG) -> LANGSUNG HOP!
+            if jumlahSekarang < jumlahAwalPet then
+                print("[Bot Aturan 4] Pet berkurang/dibeli orang (" .. tostring(jumlahSekarang) .. " < " .. tostring(jumlahAwalPet) .. "). Langsung Hop!")
+                break
+            end
+            
+            -- ATURAN 2: JIKA PET BERTAMBAH (SPAWN BARU TERDETEKSI) -> LANJUT SCAN 2
+            if jumlahSekarang > jumlahAwalPet then
+                print("[Bot Aturan 2] Pet baru terdeteksi spawn! Bersiap SCAN 2.")
+                statusTungguSelesai = true
             end
         end
-    end
 
-    -- --------------------------------------------------------
-    -- PROSES CAMPING AKTIF / PINDAH SERVER
-    -- --------------------------------------------------------
-    if adaPetBernilaiTinggi then
-        print("[Bot Mode Camp] Ada Mythic/Super, memantau server secara real-time...")
-        while adaPetBernilaiTinggi do
-            task.wait(3)
-            if #Players:GetPlayers() >= 6 then break end -- Keluar loop jika server mendadak penuh
+        -- --------------------------------------------------------
+        -- SCAN 2: JIKA BERHASIL MENDAPATKAN SPAWN PET BARU
+        -- --------------------------------------------------------
+        if statusTungguSelesai then
+            task.wait(1.5) -- Jeda aman render data mesh agar kebaca utuh
+            paket = JalankanScanWorkspace(PetFolder) -- Ambil data struktur terbaru
             
-            local updatePaket = JalankanScanWorkspace(PetFolder)
             adaPetBernilaiTinggi = false
-            for _, data in pairs(updatePaket) do
-                if data.Tier and data.Tier >= 5 then
-                    adaPetBernilaiTinggi = true
-                    break
+            for _, data in pairs(paket) do
+                if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
+            end
+
+            if next(paket) ~= nil then
+                print("[Bot Scan 2] Sukses mengirim data ter-update SCAN 2 ke API!")
+                KirimFirebase(paket)
+                KirimDiscord(paket, "Scan 2 (Setelah Spawn)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+                task.wait(1.5)
+
+                -- ATURAN 3: Jika pasca spawn membuahkan Mythic/Super, tahan 10 detik
+                if adaPetBernilaiTinggi then
+                    print("[Bot Scan 2] Target tinggi lahir! Menahan server 10 detik...")
+                    task.wait(10)
                 end
             end
-            if adaPetBernilaiTinggi then
-                KirimFirebase(updatePaket)
-            else
-                print("[Bot Mode Camp] Target sudah hilang. Siap pindah.")
-            end
         end
-    else
-        task.wait(1)
     end
 
+    -- --------------------------------------------------------
+    -- SINKRONISASI AKHIR & HOP SERVER
+    -- --------------------------------------------------------
     HapusDataServer()
     HopServer()
 end
@@ -630,6 +479,5 @@ game:GetService("Players").LocalPlayer.AncestryChanged:Connect(function()
     HapusKehadiranAktif()
 end)
 
--- Delay diturunkan aman ke 4 detik karena Loading Screen sudah dipotong secara background instan
 task.delay(4, ScanDanHop)
-print("[PetFinderBot V35] Seluruh sistem 2x Scan & Anti-Lag terintegrasi mulus tanpa error!")
+print("[PetFinderBot V36] Max Player 8 & Dynamic Anti-Ghost Spawn Aktif Berjalan!")
