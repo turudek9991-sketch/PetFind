@@ -1,9 +1,9 @@
 -- ============================================================
--- GROW A GARDEN: PET FINDER BOT V36.5 (FAST MODE UPDATE)
--- Base: V36 Stable + Config SkipWait Fast-Hop + Max Player 8
+-- GROW A GARDEN: PET FINDER BOT V36.6 (INSTANT KILAT UPDATE)
+-- Base: V36 Stable + Super Fast Scan (No Initial Delay) + Max Player 8
 -- ============================================================
 
-local skipwait = true -- [TRUE = Mode Cepat Tanpa Tunggu Spawn | FALSE = Mode Normal Tunggu Spawn]
+local skipwait = true -- [TRUE = Mode Instan Tanpa Tunggu | FALSE = Mode Normal Tunggu Spawn]
 
 local Players         = game:GetService("Players")
 local HttpService     = game:GetService("HttpService")
@@ -30,7 +30,6 @@ end
 -- ============================================================
 task.spawn(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(0.5)
 
     local function BypassLoading()
         pcall(function()
@@ -353,7 +352,7 @@ local function JalankanScanWorkspace(PetFolder)
 end
 
 -- ============================================================
--- MAIN ENGINE CONTROL (MODIFIED WITH SKIPWAIT PARAMETER)
+-- MAIN ENGINE CONTROL (SUPER KILAT FAST-SCAN & HOP)
 -- ============================================================
 local function ScanDanHop()
     DaftarkanKehadiranAktif()
@@ -367,7 +366,6 @@ local function ScanDanHop()
         return
     end
 
-    -- Ambil data scan 1 (Kondisi pas baru mendarat di server)
     local paket = JalankanScanWorkspace(PetFolder)
     local adaPetBernilaiTinggi = false
 
@@ -376,45 +374,43 @@ local function ScanDanHop()
     end
 
     -- --------------------------------------------------------
-    -- JALUR UTAMA 1: JIKA CONFIG SKIPWAIT ADALAH TRUE (MODE CEPAT)
+    -- JALUR 1: CONFIG SKIPWAIT TRUE (MODE KEJAR TAYANG - INSTAN KILAT)
     -- --------------------------------------------------------
     if skipwait == true then
-        print("[Fast Mode] Mengabaikan siklus tunggu spawn pet.")
-        
-        -- Kondisi proteksi: Jika server full 8 orang, langsung buang & hop tanpa ba-bi-bu
+        -- Aturan 1: Jika server penuh (>= 8 orang), langsung skip hop tanpa kirim apapun
         if #Players:GetPlayers() >= 8 then
-            print("[Fast Mode] Server penuh (>= 8 orang). Langsung skip hop!")
+            print("[Fast Mode] Server full 8 orang! Langsung skip cabut...")
             HapusDataServer()
             HopServer()
             return
         end
 
-        -- Jika terdeteksi ada pet tier tinggi (Mythic / Super)
+        -- Aturan 2: Jika terdeteksi ada pet Tier 5 (Mythic) atau Tier 6 (Super)
         if adaPetBernilaiTinggi then
-            print("[Fast Mode] Target Tinggi Terdeteksi! Mengirim ke API dan hold 10 detik...")
+            print("[Fast Mode] OK! Ada Target Tinggi (Mythic/Super). Mengirim API & Tahan server 10 detik...")
             KirimFirebase(paket)
             KirimDiscord(paket, "Fast Scan (Mythic/Super)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-            task.wait(10) -- Tahan 10 detik sesuai permintaan
+            task.wait(10) -- Nunggu 10 detik sesuai permintaan kamu
         else
-            -- Jika tidak ada pet tier tersebut (Hanya pet biasa/kosong), langsung kirim API & langsung cabut
+            -- Aturan 3: Jika tidak ada pet tier tersebut (hanya pet biasa atau kosong)
             if next(paket) ~= nil then
-                print("[Fast Mode] Hanya pet biasa. Kirim API lalu langsung hop...")
+                print("[Fast Mode] Hanya ada pet biasa. Kirim data lalu langsung hop kilat...")
                 KirimFirebase(paket)
                 KirimDiscord(paket, "Fast Scan (Biasa)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-                task.wait(1) -- Jeda kilat agar HTTP Request sukses ke cloud
+                task.wait(0.1) -- Jeda mikro sangat aman agar HTTP Request tuntas terkirim
             else
-                print("[Fast Mode] Server kosong tanpa pet. Langsung cabut...")
+                print("[Fast Mode] Server zonk kosong. Langsung pindah server secepatnya...")
             end
         end
 
-        -- Eksekusi akhir Fast Mode, langsung buang data lama & hopping server baru
+        -- Langsung bersihkan database server lama dan lakukan lompatan server baru instan!
         HapusDataServer()
         HopServer()
         return
     end
 
     -- --------------------------------------------------------
-    -- JALUR UTAMA 2: JIKA CONFIG SKIPWAIT ADALAH FALSE (MODE NORMAL JALUR LAMA)
+    -- JALUR 2: CONFIG SKIPWAIT FALSE (MODE NORMAL BAWAAN LAMA)
     -- --------------------------------------------------------
     if #Players:GetPlayers() >= 8 then
         print("[Bot Ramai] Player >= 8. Mengecek pet berharga...")
@@ -448,7 +444,6 @@ local function ScanDanHop()
 
     if jumlahAwalPet < 4 then
         print("[Bot Mode Tunggu] Jumlah pet di bawah 4. Memantau spawn baru...")
-        
         local statusTungguSelesai = false
         local timeout = 0
         
@@ -457,42 +452,22 @@ local function ScanDanHop()
             timeout = timeout + 2
             
             local jumlahSekarang = HitungTotalPetDiWorkspace(PetFolder)
-            
-            if #Players:GetPlayers() >= 8 then
-                print("[Bot Cancel] Server mendadak penuh >= 8 orang, abort!")
-                break
-            end
-            
-            if jumlahSekarang < jumlahAwalPet then
-                print("[Bot Aturan 4] Pet berkurang/dibeli orang. Langsung Hop!")
-                break
-            end
-            
-            if jumlahSekarang > jumlahAwalPet then
-                print("[Bot Aturan 2] Pet baru terdeteksi spawn! Bersiap SCAN 2.")
-                statusTungguSelesai = true
-            end
+            if #Players:GetPlayers() >= 8 then break end
+            if jumlahSekarang < jumlahAwalPet then break end
+            if jumlahSekarang > jumlahAwalPet then statusTungguSelesai = true end
         end
 
         if statusTungguSelesai then
             task.wait(1.5)
             paket = JalankanScanWorkspace(PetFolder)
-            
             adaPetBernilaiTinggi = false
-            for _, data in pairs(paket) do
-                if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
-            end
+            for _, data in pairs(paket) do if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end end
 
             if next(paket) ~= nil then
-                print("[Bot Scan 2] Sukses mengirim data ter-update SCAN 2 ke API!")
                 KirimFirebase(paket)
                 KirimDiscord(paket, "Scan 2 (Setelah Spawn)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
                 task.wait(1.5)
-
-                if adaPetBernilaiTinggi then
-                    print("[Bot Scan 2] Target tinggi lahir! Menahan server 10 detik...")
-                    task.wait(10)
-                end
+                if adaPetBernilaiTinggi then task.wait(10) end
             end
         end
     end
@@ -506,5 +481,8 @@ game:GetService("Players").LocalPlayer.AncestryChanged:Connect(function()
     HapusKehadiranAktif()
 end)
 
-task.delay(4, ScanDanHop)
-print("[PetFinderBot V36.5] Fast-Hop SkipWait Feature Config Ready!")
+-- PERUBAHAN UTAMA: Begitu game ke-load, eksekusi ScanDanHop langsung dipicu TANPA delay!
+if not game:IsLoaded() then game.Loaded:Wait() end
+task.spawn(ScanDanHop)
+
+print("[PetFinderBot V36.6] Fitur SkipWait Instant Scan & Hop Berhasil Dinyalakan!")
