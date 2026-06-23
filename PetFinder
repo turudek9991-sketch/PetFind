@@ -93,7 +93,7 @@ end)
 -- METADATA PET
 -- ============================================================
 local PetMetadata = {
-    Bear            = { Tier = 5, Rarity = "Mythic",    Price = 15000,  Color = 15548997  },
+    Bear            = { Tier = 5, Rarity = "Mythic",    Price = 15000,  Color = 15548997 },
     Bee             = { Tier = 4, Rarity = "Legendary", Price = 80000,  Color = 16776960 },
     BlackDragon     = { Tier = 6, Rarity = "Super",     Price = 750000, Color = 15548997 },
     Bunny           = { Tier = 1, Rarity = "Common",    Price = 20000,  Color = 5763719  },
@@ -158,7 +158,14 @@ local function AmbilServerDiklaim()
 end
 
 local function DaftarkanKehadiranAktif()
-    pcall(function() HttpRequest({ Url = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json", Method = "PUT", Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ Timestamp = os.time() }) }) end)
+    pcall(function()
+        HttpRequest({
+            Url     = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json",
+            Method  = "PUT",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body    = HttpService:JSONEncode({ Timestamp = os.time() }),
+        })
+    end)
 end
 
 local function AmbilDaftarBotAktif()
@@ -179,7 +186,7 @@ local function KirimFirebase(daftarPet)
     pcall(function()
         HttpRequest({
             Url     = FirebaseURL .. "LivePets/" .. game.JobId .. ".json",
-            Method  = "PATCH",
+            Method  = "PUT",  -- FIX: ganti PATCH -> PUT agar data selalu bersih
             Headers = { ["Content-Type"] = "application/json" },
             Body    = HttpService:JSONEncode(daftarPet),
         })
@@ -288,7 +295,7 @@ local function HopServer()
             continue
         end
         AcakTabel(servers)
-        local serverDiklaim = AmbilServerDiklaim()
+        local serverDiklaim  = AmbilServerDiklaim()
         local serverBotAktif = AmbilDaftarBotAktif()
 
         for _, jobId in ipairs(servers) do
@@ -359,17 +366,14 @@ local function ScanDanHop()
         return
     end
 
-    -- SCAN: Ambil semua pet yang ada saat ini
     local paket = JalankanScanWorkspace(PetFolder)
 
     if next(paket) ~= nil then
-        -- Ada pet: kirim ke Firebase & Discord
         print("[Bot Scan] Mengirim data ke Firebase & Discord...")
         KirimFirebase(paket)
-        KirimDiscord(paket, "Scan (Single)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
+        KirimDiscord(paket, "Scan", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
         task.wait(1.5)
 
-        -- Cek apakah ada Mythic/Super
         local adaPetBernilaiTinggi = false
         for _, data in pairs(paket) do
             if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
@@ -383,7 +387,6 @@ local function ScanDanHop()
         print("[Bot Scan] Tidak ada pet ditemukan. Langsung hop.")
     end
 
-    -- Bersihkan & hop
     HapusDataServer()
     HopServer()
 end
