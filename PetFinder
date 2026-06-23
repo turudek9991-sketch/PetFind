@@ -1,321 +1,4 @@
 -- ============================================================
--- GROW A GARDEN: PET FINDER BOT V36 (SIMPLIFIED - SINGLE SCAN)
--- ============================================================
-
-local Players         = game:GetService("Players")
-local HttpService     = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local LocalPlayer     = Players.LocalPlayer
-
-local FirebaseURL = "https://growagardenpetfinder-default-rtdb.asia-southeast1.firebasedatabase.app/"
-local WebhookURL  = "https://discordapp.com/api/webhooks/1515000444404105237/pRrXHLOqJdWsB_7xqrZQjpMXhI_Nw6L7NGOAg4S89bGECaTQyKi_0er-QKRqNhBUsenS"
-local BotUsername = "DSscripts Pet Finder"
-
-local BOT_ID = game.JobId
-
-shared.VisitedServers = shared.VisitedServers or {}
-shared.VisitedServers[game.JobId] = true
-
-local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
-if not HttpRequest then
-    LocalPlayer:Kick("[PetFinderBot] Executor tidak mendukung HTTP Request!")
-    return
-end
-
--- ============================================================
--- INTEGRASI: OPTIMASI BACKGROUND ANTI-LAG & BYPASS LOADING
--- ============================================================
-task.spawn(function()
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(0.5)
-
-    local function BypassLoading()
-        pcall(function()
-            local ls = workspace:FindFirstChild("LoadingScreenMenu")
-            if ls then ls:Destroy() end
-        end)
-        pcall(function()
-            local Cam = workspace.CurrentCamera
-            if Cam then
-                for _, v in ipairs(Cam:GetChildren()) do
-                    if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") then v:Destroy() end
-                end
-            end
-            for _, v in ipairs(game:GetService("Lighting"):GetChildren()) do
-                if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") then v:Destroy() end
-            end
-        end)
-        pcall(function()
-            local pg = LocalPlayer:FindFirstChild("PlayerGui")
-            if pg then
-                for _, gui in ipairs(pg:GetChildren()) do
-                    local n = gui.Name:lower()
-                    if string.find(n,"loading") or string.find(n,"splash") or string.find(n,"intro") then
-                        gui:Destroy()
-                    end
-                end
-            end
-        end)
-    end
-
-    local function OptimRender()
-        pcall(function() settings().Rendering.QualityLevel = 1 end)
-        pcall(function()
-            local L = game:GetService("Lighting")
-            L.GlobalShadows = false; L.FogEnd = 100000; L.Brightness = 2
-        end)
-        pcall(function() workspace.Terrain.Decoration = false end)
-    end
-
-    local NUKE_WS = {
-        "BirdVisuals","Birds","BlizzardBeams","GnomeVisuals","Gnomes",
-        "Handles","LightningEffects","DroppedItems","Fences","Folder",
-        "Middle","HolderFolders","PottedPlantVisuals","RainDrops",
-        "RainSplashes","StormRainDrops","StormSplashes","Teleports",
-        "Temporary","_Gardens","_PetVisualClient","NPCS","CapyBara",
-    }
-    local function NukeWorkspace()
-        for _, nama in ipairs(NUKE_WS) do
-            pcall(function()
-                local f = workspace:FindFirstChild(nama)
-                if f then f:Destroy() end
-            end)
-        end
-    end
-
-    BypassLoading()
-    OptimRender()
-    NukeWorkspace()
-    print("[DScripts V5] Anti Lag Gabungan Aktif ✔")
-end)
-
--- ============================================================
--- METADATA PET
--- ============================================================
-local PetMetadata = {
-    Bear            = { Tier = 5, Rarity = "Mythic",    Price = 15000,  Color = 15548997 },
-    Bee             = { Tier = 4, Rarity = "Legendary", Price = 80000,  Color = 16776960 },
-    BlackDragon     = { Tier = 6, Rarity = "Super",     Price = 750000, Color = 15548997 },
-    Bunny           = { Tier = 1, Rarity = "Common",    Price = 20000,  Color = 5763719  },
-    Deer            = { Tier = 3, Rarity = "Rare",      Price = 40000,  Color = 5763719  },
-    Dragonfly       = { Tier = 5, Rarity = "Mythic",    Price = 150000, Color = 15548997 },
-    Frog            = { Tier = 1, Rarity = "Common",    Price = 10000,  Color = 5763719  },
-    GoldenDragonfly = { Tier = 5, Rarity = "Mythic",    Price = 200000, Color = 15548997 },
-    IceSerpent      = { Tier = 6, Rarity = "Super",     Price = 800000, Color = 15548997 },
-    Monkey          = { Tier = 5, Rarity = "Mythic",    Price = 160000, Color = 15548997 },
-    Owl             = { Tier = 2, Rarity = "Uncommon",  Price = 25000,  Color = 5763719  },
-    Raccoon         = { Tier = 6, Rarity = "Super",     Price = 500000, Color = 15548997 },
-    Robin           = { Tier = 4, Rarity = "Legendary", Price = 75000,  Color = 16776960 },
-    Unicorn         = { Tier = 5, Rarity = "Mythic",    Price = 220000, Color = 15548997 },
-}
-
-local ListNamaPet = {}
-for nama in pairs(PetMetadata) do table.insert(ListNamaPet, nama) end
-
-local function FormatAngka(n)
-    local s, result, count = tostring(math.floor(n)), "", 0
-    for i = #s, 1, -1 do
-        if count > 0 and count % 3 == 0 then result = "," .. result end
-        result = s:sub(i, i) .. result
-        count  = count + 1
-    end
-    return result
-end
-
--- ============================================================
--- FIREBASE API MECHANICS
--- ============================================================
-local KLAIM_TTL = 30
-
-local function KlaimServer(targetJobId)
-    pcall(function()
-        HttpRequest({
-            Url     = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json",
-            Method  = "PUT",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = HttpService:JSONEncode({ TargetJobId = targetJobId, Timestamp = os.time() }),
-        })
-    end)
-end
-
-local function HapusKlaim()
-    pcall(function() HttpRequest({ Url = FirebaseURL .. "BotClaims/" .. BOT_ID .. ".json", Method = "DELETE" }) end)
-end
-
-local function AmbilServerDiklaim()
-    local diklaim = {}
-    local ok, res = pcall(function() return HttpRequest({ Url = FirebaseURL .. "BotClaims.json", Method = "GET" }) end)
-    if not ok or not res or not res.Body then return diklaim end
-    local okD, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-    if not okD or type(data) ~= "table" then return diklaim end
-    local now = os.time()
-    for botId, info in pairs(data) do
-        if botId ~= BOT_ID and type(info) == "table" and type(info.TargetJobId) == "string" and type(info.Timestamp) == "number" and (now - info.Timestamp) < KLAIM_TTL then
-            diklaim[info.TargetJobId] = true
-        end
-    end
-    return diklaim
-end
-
-local function DaftarkanKehadiranAktif()
-    pcall(function()
-        HttpRequest({
-            Url     = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json",
-            Method  = "PUT",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = HttpService:JSONEncode({ Timestamp = os.time() }),
-        })
-    end)
-end
-
-local function AmbilDaftarBotAktif()
-    local aktif = {}
-    local ok, res = pcall(function() return HttpRequest({ Url = FirebaseURL .. "ActiveBots.json", Method = "GET" }) end)
-    if not ok or not res or not res.Body then return aktif end
-    local okD, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-    if not okD or type(data) ~= "table" then return aktif end
-    for jobId, _ in pairs(data) do aktif[jobId] = true end
-    return aktif
-end
-
-local function HapusKehadiranAktif()
-    pcall(function() HttpRequest({ Url = FirebaseURL .. "ActiveBots/" .. game.JobId .. ".json", Method = "DELETE" }) end)
-end
-
-local function KirimFirebase(daftarPet)
-    pcall(function()
-        HttpRequest({
-            Url     = FirebaseURL .. "LivePets/" .. game.JobId .. ".json",
-            Method  = "PUT",  -- FIX: ganti PATCH -> PUT agar data selalu bersih
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = HttpService:JSONEncode(daftarPet),
-        })
-    end)
-end
-
-local function HapusDataServer()
-    pcall(function() HttpRequest({ Url = FirebaseURL .. "LivePets/" .. game.JobId .. ".json", Method = "DELETE" }) end)
-end
-
--- ============================================================
--- DISCORD WEBHOOK SYSTEM
--- ============================================================
-local function KirimDiscord(paket, titleTag, playerCount, maxPlayers, jobId, placeId)
-    local topColor, topTier = 5763719, 0
-    local petList = {}
-
-    for namaPet, _ in pairs(paket) do
-        local meta = PetMetadata[namaPet] or {}
-        if (meta.Tier or 0) > topTier then
-            topTier  = meta.Tier or 0
-            topColor = meta.Color or 5763719
-        end
-        table.insert(petList, { Name = namaPet, Meta = meta })
-    end
-
-    table.sort(petList, function(a, b)
-        if (a.Meta.Tier or 0) ~= (b.Meta.Tier or 0) then return (a.Meta.Tier or 0) > (b.Meta.Tier or 0) end
-        return (a.Meta.Price or 0) > (b.Meta.Price or 0)
-    end)
-
-    local petLines = ""
-    for _, e in ipairs(petList) do
-        petLines = petLines .. string.format("• **%s** — %s · %s\n", e.Name, e.Meta.Rarity or "Common", FormatAngka(e.Meta.Price or 0))
-    end
-
-    local teleportScript = string.format('game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)', tostring(placeId), tostring(jobId))
-
-    local embed = {
-        username = BotUsername,
-        embeds   = {{
-            title       = "Pet Spawn — " .. tostring(titleTag),
-            description = string.format("**%d pet spotted**\n\n%s", #petList, petLines),
-            color       = topColor,
-            fields      = {
-                { name = "Players",         value = string.format("%d/%d", playerCount, maxPlayers), inline = true  },
-                { name = "Place ID",        value = tostring(placeId),                               inline = true  },
-                { name = "Server (Job ID)", value = string.format("`%s`", tostring(jobId)),          inline = false },
-                { name = "Link Execute",    value = string.format("```lua\n%s\n```", teleportScript), inline = false },
-            },
-            footer    = { text = BotUsername .. " • Pet Finder" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-        }}
-    }
-
-    pcall(function()
-        HttpRequest({
-            Url     = WebhookURL,
-            Method  = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = HttpService:JSONEncode(embed),
-        })
-    end)
-end
-
--- ============================================================
--- SERVER HOPPING ROUTINE
--- ============================================================
-local teleportBerhasil = false
-TeleportService.TeleportInitFailed:Connect(function(player, reason)
-    if player == LocalPlayer then teleportBerhasil = false end
-end)
-
-local function AcakTabel(t)
-    for i = #t, 2, -1 do local j = math.random(1, i) t[i], t[j] = t[j], t[i] end
-    return t
-end
-
-local function AmbilSemuaServerKosong()
-    local list   = {}
-    local cursor = ""
-    repeat
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (cursor ~= "" and ("&cursor=" .. cursor) or "")
-        local ok, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(url)) end)
-        if not ok or not result or type(result.data) ~= "table" then break end
-        for _, srv in ipairs(result.data) do
-            if srv.id ~= game.JobId and not shared.VisitedServers[srv.id] and type(srv.playing) == "number" and type(srv.maxPlayers) == "number" and srv.playing < srv.maxPlayers then
-                table.insert(list, srv.id)
-            end
-        end
-        cursor = (type(result.nextPageCursor) == "string" and result.nextPageCursor) or ""
-    until cursor == "" or cursor == "null"
-    return list
-end
-
-local function HopServer()
-    teleportBerhasil = false
-    HapusKlaim()
-    HapusKehadiranAktif()
-    print("[Bot] Memulai hop server...")
-    while not teleportBerhasil do
-        local servers = AmbilSemuaServerKosong()
-        if #servers == 0 then
-            shared.VisitedServers = {}
-            task.wait(4)
-            continue
-        end
-        AcakTabel(servers)
-        local serverDiklaim  = AmbilServerDiklaim()
-        local serverBotAktif = AmbilDaftarBotAktif()
-
-        for _, jobId in ipairs(servers) do
-            if teleportBerhasil then break end
-            if serverDiklaim[jobId] or serverBotAktif[jobId] then continue end
-
-            KlaimServer(jobId)
-            local ok, err = pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, LocalPlayer) end)
-            if ok then
-                task.wait(10)
-                if not teleportBerhasil then HapusKlaim(); task.wait(1) end
-            else
-                HapusKlaim(); task.wait(1)
-            end
-        end
-        if not teleportBerhasil then task.wait(4) end
-    end
-end
-
--- ============================================================
 -- SCANNER
 -- ============================================================
 local function JalankanScanWorkspace(PetFolder)
@@ -352,27 +35,134 @@ local function JalankanScanWorkspace(PetFolder)
 end
 
 -- ============================================================
--- MAIN ENGINE (SINGLE SCAN - SIMPLIFIED)
+-- KIRIM FIREBASE DENGAN RETRY
+-- ============================================================
+local function KirimFirebaseSafe(daftarPet)
+    for percobaan = 1, 3 do
+        local ok, err = pcall(function()
+            local res = HttpRequest({
+                Url     = FirebaseURL .. "LivePets/" .. game.JobId .. ".json",
+                Method  = "PUT",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body    = HttpService:JSONEncode(daftarPet),
+            })
+            if not res or (res.StatusCode and res.StatusCode >= 400) then
+                error("HTTP Error: " .. tostring(res and res.StatusCode))
+            end
+        end)
+        if ok then
+            print("[Firebase] Berhasil kirim percobaan ke-" .. percobaan)
+            return true
+        else
+            warn("[Firebase] Gagal percobaan " .. percobaan .. ": " .. tostring(err))
+            task.wait(2)
+        end
+    end
+    warn("[Firebase] Gagal setelah 3x percobaan.")
+    return false
+end
+
+-- ============================================================
+-- KIRIM DISCORD DENGAN RETRY
+-- ============================================================
+local function KirimDiscordSafe(paket, titleTag, playerCount, maxPlayers, jobId, placeId)
+    local topColor, topTier = 5763719, 0
+    local petList = {}
+
+    for namaPet, _ in pairs(paket) do
+        local meta = PetMetadata[namaPet] or {}
+        if (meta.Tier or 0) > topTier then
+            topTier  = meta.Tier or 0
+            topColor = meta.Color or 5763719
+        end
+        table.insert(petList, { Name = namaPet, Meta = meta })
+    end
+
+    table.sort(petList, function(a, b)
+        if (a.Meta.Tier or 0) ~= (b.Meta.Tier or 0) then return (a.Meta.Tier or 0) > (b.Meta.Tier or 0) end
+        return (a.Meta.Price or 0) > (b.Meta.Price or 0)
+    end)
+
+    local petLines = ""
+    for _, e in ipairs(petList) do
+        petLines = petLines .. string.format("• **%s** — %s · %s\n", e.Name, e.Meta.Rarity or "Common", FormatAngka(e.Meta.Price or 0))
+    end
+
+    local teleportScript = string.format(
+        'game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)',
+        tostring(placeId), tostring(jobId)
+    )
+
+    local embed = {
+        username = BotUsername,
+        embeds   = {{
+            title       = "Pet Spawn — " .. tostring(titleTag),
+            description = string.format("**%d pet spotted**\n\n%s", #petList, petLines),
+            color       = topColor,
+            fields      = {
+                { name = "Players",         value = string.format("%d/%d", playerCount, maxPlayers), inline = true  },
+                { name = "Place ID",        value = tostring(placeId),                               inline = true  },
+                { name = "Server (Job ID)", value = string.format("`%s`", tostring(jobId)),          inline = false },
+                { name = "Link Execute",    value = string.format("```lua\n%s\n```", teleportScript), inline = false },
+            },
+            footer    = { text = BotUsername .. " • Pet Finder" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        }}
+    }
+
+    for percobaan = 1, 3 do
+        local ok, err = pcall(function()
+            local res = HttpRequest({
+                Url     = WebhookURL,
+                Method  = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body    = HttpService:JSONEncode(embed),
+            })
+            if not res or (res.StatusCode and res.StatusCode >= 400) then
+                error("HTTP Error: " .. tostring(res and res.StatusCode))
+            end
+        end)
+        if ok then
+            print("[Discord] Berhasil kirim percobaan ke-" .. percobaan)
+            return true
+        else
+            warn("[Discord] Gagal percobaan " .. percobaan .. ": " .. tostring(err))
+            task.wait(2)
+        end
+    end
+    warn("[Discord] Gagal setelah 3x percobaan.")
+    return false
+end
+
+-- ============================================================
+-- MAIN ENGINE
 -- ============================================================
 local function ScanDanHop()
     DaftarkanKehadiranAktif()
 
-    local MapFolder = workspace:WaitForChild("Map", 20)
-    local PetFolder = MapFolder and MapFolder:WaitForChild("WildPetSpawns", 20)
+    -- Tunggu lebih lama agar WildPetSpawns pasti loaded
+    local MapFolder = workspace:WaitForChild("Map", 30)
+    local PetFolder = MapFolder and MapFolder:WaitForChild("WildPetSpawns", 30)
 
     if not PetFolder then
+        warn("[Bot] WildPetSpawns tidak ditemukan dalam 30 detik. Hop.")
         HapusDataServer()
         HopServer()
         return
     end
 
-    local paket = JalankanScanWorkspace(PetFolder)
+    -- Tambah jeda agar semua child di PetFolder fully replicated
+    task.wait(3)
 
-    if next(paket) ~= nil then
+    local paket = JalankanScanWorkspace(PetFolder)
+    local jumlahPet = 0
+    for _ in pairs(paket) do jumlahPet = jumlahPet + 1 end
+    print("[Bot Scan] Ditemukan " .. jumlahPet .. " jenis pet.")
+
+    if jumlahPet > 0 then
         print("[Bot Scan] Mengirim data ke Firebase & Discord...")
-        KirimFirebase(paket)
-        KirimDiscord(paket, "Scan", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-        task.wait(1.5)
+        KirimFirebaseSafe(paket)
+        KirimDiscordSafe(paket, "Scan", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
 
         local adaPetBernilaiTinggi = false
         for _, data in pairs(paket) do
@@ -384,7 +174,7 @@ local function ScanDanHop()
             task.wait(10)
         end
     else
-        print("[Bot Scan] Tidak ada pet ditemukan. Langsung hop.")
+        print("[Bot Scan] Tidak ada pet. Langsung hop.")
     end
 
     HapusDataServer()
@@ -396,5 +186,6 @@ game:GetService("Players").LocalPlayer.AncestryChanged:Connect(function()
     HapusKehadiranAktif()
 end)
 
-task.delay(4, ScanDanHop)
+-- Delay lebih lama agar server fully loaded sebelum scan
+task.delay(8, ScanDanHop)
 print("[PetFinderBot V36 Simplified] Single Scan Mode Aktif!")
