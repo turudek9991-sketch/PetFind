@@ -3,8 +3,6 @@
 -- Base: V32 Stable + Perbaikan Deteksi Naik/Turun Pet + Max Player 8
 -- ============================================================
 
-local skipwait = true -- [Ketik true untuk langsung hop setelah scan awal | false untuk tunggu spawn seperti biasa]
-
 local Players         = game:GetService("Players")
 local HttpService     = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -194,7 +192,7 @@ local function HapusDataServer()
 end
 
 -- ============================================================
--- DISCORD WEBHOOK SYSTEM (FIXED SYNTAX TABLE ERROR)
+-- DISCORD WEBHOOK SYSTEM
 -- ============================================================
 local function KirimDiscord(paket, titleTag, playerCount, maxPlayers, jobId, placeId)
     local topColor, topTier = 5763719, 0
@@ -221,7 +219,6 @@ local function KirimDiscord(paket, titleTag, playerCount, maxPlayers, jobId, pla
 
     local teleportScript = string.format('game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)', tostring(placeId), tostring(jobId))
 
-    -- Perbaikan: koma menggantung di penutupan fields sudah dibersihkan total
     local embed = {
         username = BotUsername,
         embeds   = {{
@@ -232,7 +229,7 @@ local function KirimDiscord(paket, titleTag, playerCount, maxPlayers, jobId, pla
                 { name = "Players",         value = string.format("%d/%d", playerCount, maxPlayers), inline = true  },
                 { name = "Place ID",        value = tostring(placeId),                               inline = true  },
                 { name = "Server (Job ID)", value = string.format("`%s`", tostring(jobId)),          inline = false },
-                { name = "Link Execute",    value = string.format("```lua\n%s\n```", teleportScript), inline = false }
+                { name = "Link Execute",    value = string.format("```lua\n%s\n```", teleportScript), inline = false },
             },
             footer    = { text = BotUsername .. " • Pet Finder" },
             timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
@@ -375,39 +372,6 @@ local function ScanDanHop()
 
     for _, data in pairs(paket) do
         if data.Tier and data.Tier >= 5 then adaPetBernilaiTinggi = true break end
-    end
-
-    -- ============================================================
-    -- PENYUNTINGAN VARIABEL JALUR SKIPWAIT KILAT SECARA BERSIH
-    -- ============================================================
-    if skipwait == true then
-        -- 1. Aturan jika server penuh 8 orang -> langsung skip hop
-        if #Players:GetPlayers() >= 8 then
-            print("[SkipWait Mode] Server full 8 orang, langsung skip!")
-            HapusDataServer()
-            HopServer()
-            return
-        end
-
-        -- 2. Mengirimkan data apa adanya ke database Firebase API
-        if next(paket) ~= nil then
-            KirimFirebase(paket)
-            KirimDiscord(paket, "SkipWait Mode Scan (Instan)", #Players:GetPlayers(), Players.MaxPlayers, game.JobId, game.PlaceId)
-            task.wait(0.5)
-        end
-
-        -- 3. Aturan penahanan server jika ada target bernilai tinggi lahir
-        if adaPetBernilaiTinggi then
-            print("[SkipWait Mode] Terdeteksi Mythic/Super! Menahan server 10 detik...")
-            task.wait(10)
-        else
-            print("[SkipWait Mode] Tidak ada target bernilai tinggi. Langsung hop!")
-        end
-
-        -- 4. Bypass melompati seluruh siklus tunggu spawn lama
-        HapusDataServer()
-        HopServer()
-        return
     end
 
     -- ATURAN UTAMA 1: UPDATE MAKSIMAL PLAYER DI SERVER ADALAH 8
