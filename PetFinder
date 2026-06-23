@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN: PET FINDER BOT V36 (DELTA FIXED)
+-- GROW A GARDEN: PET FINDER BOT V36 (DELTA FIXED + WILDPET FORMAT)
 -- ============================================================
 
 local Players         = game:GetService("Players")
@@ -13,14 +13,12 @@ local BotUsername = "DSscripts Pet Finder"
 
 local BOT_ID = game.JobId
 
--- Delta fix: tidak pakai shared, pakai local variable
 local VisitedServers = {}
 VisitedServers[game.JobId] = true
 
--- Delta fix: HttpRequest langsung pakai request
 local HttpRequest = request
 if not HttpRequest then
-    warn("[PetFinderBot] HttpRequest tidak ditemukan di executor ini!")
+    warn("[PetFinderBot] HttpRequest tidak ditemukan!")
     return
 end
 print("[PetFinderBot] HttpRequest OK ✔")
@@ -345,37 +343,73 @@ local function HopServer()
 end
 
 -- ============================================================
--- SCANNER
+-- SCANNER — FORMAT: WildPet_{NamaPet}_WildPet_{UUID}
 -- ============================================================
+local function ExtrakNamaPetDariNama(namaObj)
+    -- Format: WildPet_Frog_WildPet_UUID atau WildPet_GoldenDragonfly_WildPet_UUID
+    -- Ambil bagian setelah "WildPet_" pertama, sebelum "_WildPet_" kedua
+    local petPart = namaObj:match("^WildPet_(.+)_WildPet_")
+    if petPart then return petPart end
+
+    -- Fallback: coba match langsung nama pet dari metadata
+    return nil
+end
+
 local function JalankanScanWorkspace(PetFolder)
     local paket       = {}
     local PlayerCount = #Players:GetPlayers()
     local MaxPlayers  = Players.MaxPlayers
 
     for _, obj in ipairs(PetFolder:GetChildren()) do
-        local namaLower = obj.Name:lower()
-        for _, namaPet in ipairs(ListNamaPet) do
-            if string.find(namaLower, namaPet:lower()) then
-                if not paket[namaPet] then
-                    local part = obj:IsA("BasePart") and obj
-                        or obj:FindFirstChildWhichIsA("BasePart", true)
-                        or obj.PrimaryPart
-                    if part then
-                        local meta = PetMetadata[namaPet] or { Tier = 1 }
-                        paket[namaPet] = {
-                            PetName        = namaPet,
-                            Tier           = meta.Tier,
-                            Rarity         = meta.Rarity or "Common",
-                            JobId          = game.JobId,
-                            PlaceId        = game.PlaceId,
-                            Position       = { X = part.CFrame.X, Y = part.CFrame.Y, Z = part.CFrame.Z },
-                            Timestamp      = os.time(),
-                            CurrentPlayers = PlayerCount,
-                            MaxPlayers     = MaxPlayers,
-                        }
+        -- Coba ekstrak nama pet dari format WildPet_xxx_WildPet_UUID
+        local namaPetDiekstrak = ExtrakNamaPetDariNama(obj.Name)
+
+        local namaPetDitemukan = nil
+
+        if namaPetDiekstrak then
+            -- Cek apakah nama yang diekstrak ada di metadata (exact match)
+            if PetMetadata[namaPetDiekstrak] then
+                namaPetDitemukan = namaPetDiekstrak
+            else
+                -- Coba case-insensitive match
+                for _, namaMeta in ipairs(ListNamaPet) do
+                    if namaMeta:lower() == namaPetDiekstrak:lower() then
+                        namaPetDitemukan = namaMeta
+                        break
                     end
                 end
-                break
+            end
+        end
+
+        -- Fallback: string.find seperti sebelumnya
+        if not namaPetDitemukan then
+            local namaLower = obj.Name:lower()
+            for _, namaMeta in ipairs(ListNamaPet) do
+                if string.find(namaLower, namaMeta:lower()) then
+                    namaPetDitemukan = namaMeta
+                    break
+                end
+            end
+        end
+
+        if namaPetDitemukan and not paket[namaPetDitemukan] then
+            local part = obj:IsA("BasePart") and obj
+                or obj:FindFirstChildWhichIsA("BasePart", true)
+                or (obj:IsA("Model") and obj.PrimaryPart)
+            if part then
+                local meta = PetMetadata[namaPetDitemukan] or { Tier = 1 }
+                paket[namaPetDitemukan] = {
+                    PetName        = namaPetDitemukan,
+                    Tier           = meta.Tier,
+                    Rarity         = meta.Rarity or "Common",
+                    JobId          = game.JobId,
+                    PlaceId        = game.PlaceId,
+                    Position       = { X = part.CFrame.X, Y = part.CFrame.Y, Z = part.CFrame.Z },
+                    Timestamp      = os.time(),
+                    CurrentPlayers = PlayerCount,
+                    MaxPlayers     = MaxPlayers,
+                }
+                print("[Scanner] Pet ditemukan: " .. namaPetDitemukan .. " dari object: " .. obj.Name)
             end
         end
     end
@@ -398,12 +432,19 @@ local function ScanDanHop()
         return
     end
 
+    -- Jeda agar semua object WildPetSpawns fully replicated
     task.wait(3)
+
+    -- Debug: print semua nama object di WildPetSpawns
+    print("[Debug] Isi WildPetSpawns (" .. #PetFolder:GetChildren() .. " object):")
+    for _, obj in ipairs(PetFolder:GetChildren()) do
+        print("  >> " .. obj.Name .. " [" .. obj.ClassName .. "]")
+    end
 
     local paket     = JalankanScanWorkspace(PetFolder)
     local jumlahPet = 0
     for _ in pairs(paket) do jumlahPet = jumlahPet + 1 end
-    print("[Bot Scan] Ditemukan " .. jumlahPet .. " jenis pet.")
+    print("[Bot Scan] Total pet terdeteksi: " .. jumlahPet)
 
     if jumlahPet > 0 then
         KirimFirebase(paket)
@@ -423,7 +464,7 @@ local function ScanDanHop()
             task.wait(10)
         end
     else
-        print("[Bot Scan] Tidak ada pet. Langsung hop.")
+        print("[Bot Scan] Tidak ada pet ditemukan. Langsung hop.")
     end
 
     HapusDataServer()
@@ -436,4 +477,4 @@ game:GetService("Players").LocalPlayer.AncestryChanged:Connect(function()
 end)
 
 task.delay(8, ScanDanHop)
-print("[PetFinderBot V36 Delta Fixed] Aktif!")
+print("[PetFinderBot V36 Delta Fixed] WildPet Format Scanner Aktif!")
